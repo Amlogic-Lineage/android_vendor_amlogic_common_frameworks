@@ -78,6 +78,10 @@ LOCAL_SRC_FILES:= \
   FrameRateAutoAdaption.cpp \
   FormatColorDepth.cpp
 
+ifeq ($(TARGET_PRODUCT), odroidn2)
+LOCAL_CFLAGS += -DODROIDN2
+endif
+
 LOCAL_SHARED_LIBRARIES := \
   libsystemcontrolservice \
   libcutils \
@@ -150,6 +154,10 @@ LOCAL_SRC_FILES:= \
   HDCP/HDCPTxAuth.cpp \
   FrameRateAutoAdaption.cpp \
   FormatColorDepth.cpp
+
+ifeq ($(TARGET_PRODUCT), odroidn2)
+LOCAL_CFLAGS += -DODROIDN2
+endif
 
 LOCAL_STATIC_LIBRARIES := \
   libz \
