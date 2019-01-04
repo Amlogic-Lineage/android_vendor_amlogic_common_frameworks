@@ -159,7 +159,7 @@ int Ubootenv::init() {
     struct stat st;
 
     //the nand env or block env is the same
-    mEnvPartitionSize = 0x8000;
+    mEnvPartitionSize = 0x10000;
 //#if defined(MESON8_ENVSIZE) || defined(GXBABY_ENVSIZE) || defined(GXTVBB_ENVSIZE) || defined(GXL_ENVSIZE)
 //    mEnvPartitionSize = 0x10000;
 //#endif
