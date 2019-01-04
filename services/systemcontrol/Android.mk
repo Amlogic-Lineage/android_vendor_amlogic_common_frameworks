@@ -58,7 +58,6 @@ LOCAL_CFLAGS += -DANDROID_PLATFORM_SDK_VERSION=$(PLATFORM_SDK_VERSION)
 
 LOCAL_SRC_FILES:= \
   main_systemcontrol.cpp \
-  ubootenv/Ubootenv.cpp \
   VdcLoop.c \
   SysWrite.cpp \
   SystemControl.cpp \
@@ -77,6 +76,14 @@ LOCAL_SRC_FILES:= \
   HDCP/HDCPRx22ImgKey.cpp \
   FrameRateAutoAdaption.cpp \
   FormatColorDepth.cpp
+
+ifeq ($(TARGET_PRODUCT), odroidn2)
+LOCAL_SRC_FILES += \
+  ubootenv/Ubootenv-odroid.cpp
+else
+LOCAL_SRC_FILES += \
+  ubootenv/Ubootenv-odroid.cpp
+endif
 
 ifeq ($(TARGET_PRODUCT), odroidn2)
 LOCAL_CFLAGS += -DODROIDN2
@@ -142,7 +149,6 @@ LOCAL_CFLAGS += -DANDROID_PLATFORM_SDK_VERSION=$(PLATFORM_SDK_VERSION)
 
 LOCAL_SRC_FILES:= \
   main_recovery.cpp \
-  ubootenv/Ubootenv.cpp \
   SysWrite.cpp \
   DisplayMode.cpp \
   SysTokenizer.cpp \
@@ -154,6 +160,14 @@ LOCAL_SRC_FILES:= \
   HDCP/HDCPTxAuth.cpp \
   FrameRateAutoAdaption.cpp \
   FormatColorDepth.cpp
+
+ifeq ($(TARGET_PRODUCT), odroidn2)
+LOCAL_SRC_FILES += \
+  ubootenv/Ubootenv-odroid.cpp
+else
+LOCAL_SRC_FILES += \
+  ubootenv/Ubootenv.cpp
+endif
 
 ifeq ($(TARGET_PRODUCT), odroidn2)
 LOCAL_CFLAGS += -DODROIDN2

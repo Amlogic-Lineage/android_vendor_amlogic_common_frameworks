@@ -21,6 +21,10 @@
 #include <stdint.h>
 #include <zlib.h>
 
+#if defined(ODROIDN2)
+#include "Ubootenv-odroid.cpp"
+#else
+
 #ifdef MTD_OLD
 # include <linux/mtd/mtd.h>
 #else
@@ -520,3 +524,4 @@ void Ubootenv::propertyLoad() {
     SYS_LOGI("[ubootenv] set property count: %d\n", count);
     mEnvInitDone = true;
 }
+#endif

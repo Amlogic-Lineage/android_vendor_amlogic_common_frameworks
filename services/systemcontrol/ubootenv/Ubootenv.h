@@ -73,9 +73,19 @@ private:
     environment_t mEnvData;
     env_attribute_t mEnvAttrHeader;
 
+#if defined(ODROIDN2)
+    pthread_mutex_t mEnvLock;
+#else
     mutex_t mEnvLock;
+#endif
     bool mEnvInitDone;
 };
+
+#if defined(ODROIDN2)
+#define mutex_lock(x)		pthread_mutex_lock(x)
+#define mutex_unlock(x)		pthread_mutex_unlock(x)
+#else
+#endif
 
 #ifdef __cplusplus
 }

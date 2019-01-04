@@ -32,6 +32,7 @@ cc_library_static {
     ],
     cflags: [
         "-DRECOVERY_MODE",
-        "-DPLATFORM_SDK_VERSION=%d"
+        "-DPLATFORM_SDK_VERSION=%d",
+        "-DODROIDN2"
     ],
 }
