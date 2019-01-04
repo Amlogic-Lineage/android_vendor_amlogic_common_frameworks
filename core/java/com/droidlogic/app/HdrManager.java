@@ -27,7 +27,7 @@ import android.util.Log;
 public class HdrManager {
     private static final String TAG                 = "HdrManager";
 
-    private static final String KEY_HDR_MODE        = "persist.sys.hdr.state";
+    private static final String KEY_HDR_MODE        = "persist.vendor.sys.hdr.state";
 
     public static final int MODE_OFF  = 0;
     public static final int MODE_ON   = 1;
@@ -38,7 +38,7 @@ public class HdrManager {
 
     public HdrManager(Context context){
         mContext = context;
-        mSystemControl = new SystemControlManager(context);
+        mSystemControl = SystemControlManager.getInstance();
     }
 
     public int getHdrMode() {

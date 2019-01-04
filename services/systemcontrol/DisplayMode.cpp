@@ -202,6 +202,9 @@ void DisplayMode::init() {
     parseConfigFile();
     pFrameRateAutoAdaption = new FrameRateAutoAdaption(this);
 
+    getBootEnv(UBOOTENV_REBOOT_MODE, mRebootMode);
+    SYS_LOGI("reboot_mode :%s\n", mRebootMode);
+
     SYS_LOGI("display mode init type: %d [0:none 1:tablet 2:mbox 3:tv], soc type:%s, default UI:%s",
         mDisplayType, mSocType, mDefaultUI);
     if (DISPLAY_TYPE_MBOX == mDisplayType) {
@@ -256,7 +259,7 @@ void DisplayMode::reInit() {
 void DisplayMode::setTvModelName() {
     char modelName[MODE_LEN] = {0};
     if (getBootEnv("ubootenv.var.model_name", modelName)) {
-        pSysWrite->setProperty("tv.mode_name", modelName);
+        pSysWrite->setProperty("tv.model_name", modelName);
     }
 }
 
@@ -271,7 +274,7 @@ void DisplayMode::setLogLevel(int level){
 bool DisplayMode::getBootEnv(const char* key, char* value) {
     const char* p_value = mUbootenv->getValue(key);
 
-    if (mLogLevel > LOG_LEVEL_1)
+    //if (mLogLevel > LOG_LEVEL_1)
         SYS_LOGI("getBootEnv key:%s value:%s", key, p_value);
 
 	if (p_value) {
@@ -418,7 +421,7 @@ void DisplayMode::setSourceOutputMode(const char* outputmode, output_mode_state 
         getHdmiOutputMode((char *)outputmode, &data);
     }
 
-    bool deepColorEnabled = pSysWrite->getPropertyBoolean(PROP_DEEPCOLOR, false);
+    bool deepColorEnabled = pSysWrite->getPropertyBoolean(PROP_DEEPCOLOR, true);
     pSysWrite->readSysfs(HDMI_TX_FRAMRATE_POLICY, value);
     if ((OUPUT_MODE_STATE_SWITCH == state) && (strcmp(value, "0") == 0)) {
         char curDisplayMode[MODE_LEN] = {0};
@@ -474,7 +477,17 @@ void DisplayMode::setSourceOutputMode(const char* outputmode, output_mode_state 
     updateDeepColor(cvbsMode, state, outputmode);
     char curMode[MODE_LEN] = {0};
     pSysWrite->readSysfs(SYSFS_DISPLAY_MODE, curMode);
+
+    if (strstr(mRebootMode, "quiescent")) {
+        SYS_LOGI("reboot_mode is quiescent\n");
+        pSysWrite->writeSysfs(SYSFS_DISPLAY_MODE, "null");
+        return;
+    }
+
     if (strstr(curMode, outputmode) == NULL) {
+        if (cvbsMode) {
+            pSysWrite->writeSysfs(SYSFS_DISPLAY_MODE, "null");
+        }
         pSysWrite->writeSysfs(SYSFS_DISPLAY_MODE, outputmode);
     } else {
         SYS_LOGI("cur display mode is equals to outputmode, Do not need set it\n");
@@ -521,7 +534,7 @@ void DisplayMode::setSourceOutputMode(const char* outputmode, output_mode_state 
 #ifndef RECOVERY_MODE
     notifyEvent(EVENT_OUTPUT_MODE_CHANGE);
 #endif
-    if (!cvbsMode && (OUPUT_MODE_STATE_INIT != state) && isDolbyVisionEnable()) {
+    if (!cvbsMode && (OUPUT_MODE_STATE_INIT != state) && isDolbyVisionEnable() && setDolbyVisionState) {
         setDolbyVisionEnable(getDolbyVisionType());
     }
     //audio
@@ -535,6 +548,24 @@ void DisplayMode::setSourceOutputMode(const char* outputmode, output_mode_state 
     } else {
         setBootEnv(UBOOTENV_HDMIMODE, (char *)outputmode);
     }
+    if (pSysWrite->getPropertyBoolean(PROP_DISPLAY_SIZE_CHECK, true)) {
+        char resolution[MODE_LEN] = {0};
+        char defaultResolution[MODE_LEN] = {0};
+        char finalResolution[MODE_LEN] = {0};
+        int w = 0, h = 0, w1 =0, h1 = 0;
+        pSysWrite->readSysfs(SYS_DISPLAY_RESOLUTION, resolution);
+        pSysWrite->getPropertyString(PROP_DISPLAY_SIZE, defaultResolution, "0x0");
+        sscanf(resolution, "%dx%d", &w, &h);
+        sscanf(defaultResolution, "%dx%d", &w1, &h1);
+        if ((w != w1) || (h != h1)) {
+            sprintf(finalResolution, "%dx%d", w, h);
+            pSysWrite->setProperty(PROP_DISPLAY_SIZE, finalResolution);
+        }
+    }
+
+    char defaultResolution[MODE_LEN] = {0};
+    pSysWrite->getPropertyString(PROP_DISPLAY_SIZE, defaultResolution, "0x0");
+    SYS_LOGI("set display-size:%s\n", defaultResolution);
     SYS_LOGI("set output mode:%s done\n", outputmode);
 }
 
@@ -941,6 +972,7 @@ void* DisplayMode::bootanimDetect(void* data) {
     DisplayMode *pThiz = (DisplayMode*)data;
     char bootanimState[MODE_LEN] = {"stopped"};
     char fs_mode[MODE_LEN] = {0};
+    char recovery_state[MODE_LEN] = {0};
     char outputmode[MODE_LEN] = {0};
     char bootvideo[MODE_LEN] = {0};
 
@@ -973,8 +1005,14 @@ void* DisplayMode::bootanimDetect(void* data) {
         pThiz->setBootanimStatus(1);
     }
 
-    if ((!strcmp(fs_mode, "recovery")) || (!strcmp(bootvideo, "1"))) {
+    // Cannot access amldisplay_prop in P, selinux never allowed!
+    // check service property instead
+    pThiz->pSysWrite->getPropertyString("init.svc.recovery", recovery_state, "stopped");
+    SYS_LOGE("recovery running state is:%s!\n", recovery_state);
+    if ((!strcmp(recovery_state, "running"))|| (!strcmp(fs_mode, "recovery")) || (!strcmp(bootvideo, "1"))) {
         //recovery or bootvideo mode
+        SYS_LOGE("recovery  or bootvideo mode");
+        usleep(1000000LL);
         pThiz->pSysWrite->writeSysfs(DISPLAY_FB0_BLANK, "1");
         //need close fb1, because uboot logo show in fb1
         pThiz->pSysWrite->writeSysfs(DISPLAY_FB1_BLANK, "1");
@@ -987,7 +1025,14 @@ void* DisplayMode::bootanimDetect(void* data) {
         }
     }
 
-    pThiz->pTxAuth->setBootAnimFinished(true);
+    if (pThiz->pTxAuth)
+        pThiz->pTxAuth->setBootAnimFinished(true);
+    else
+        SYS_LOGE("pThiz->pTxAuth=NULL");
+
+    SYS_LOGE("recovery  or bootvideo end");
+    usleep(1000000LL);
+
     return NULL;
 }
 
@@ -1096,6 +1141,10 @@ int DisplayMode::getBootenvInt(const char* key, int defaultVal) {
  * this function will set mode to 'null', policy to 1, and set mode to previous value later.
  */
 void DisplayMode::setAutoSwitchFrameRate(int state) {
+//default force shift 0.001 clk, if you do not want to do that, open this marco.
+//so you can control switch it from DroidTvSetings app.
+//#define DEFAULT_NO_CLK_OFFSET
+#ifdef DEFAULT_NO_CLK_OFFSET
     if ((state == OUPUT_MODE_STATE_SWITCH_ADAPTER) || pFrameRateAutoAdaption->autoSwitchFlag == true) {
         SYS_LOGI("FrameRate video need set mode to null, and policy to 1 to into adapter policy\n");
         pSysWrite->writeSysfs(SYSFS_DISPLAY_MODE, "null");
@@ -1107,6 +1156,7 @@ void DisplayMode::setAutoSwitchFrameRate(int state) {
         }
         pSysWrite->writeSysfs(HDMI_TX_FRAMRATE_POLICY, "0");
     }
+#endif
 }
 
 void DisplayMode::updateDefaultUI() {
@@ -1215,7 +1265,7 @@ void DisplayMode::updateDeepColor(bool cvbsMode, output_mode_state state, const 
     if (!cvbsMode && (mDisplayType != DISPLAY_TYPE_TV)) {
         char colorAttribute[MODE_LEN] = {0};
         FormatColorDepth deepColor;
-        if (pSysWrite->getPropertyBoolean(PROP_DEEPCOLOR, false)) {
+        if (pSysWrite->getPropertyBoolean(PROP_DEEPCOLOR, true)) {
             char mode[MAX_STR_LEN] = {0};
             if (isDolbyVisionEnable() && isTvSupportDolbyVision(mode)) {
                  char type[MODE_LEN] = {0};
@@ -1404,6 +1454,7 @@ void DisplayMode::getPosition(const char* curMode, int *position) {
     }
 #endif
 
+    mutex_lock(&mEnvLock);
     sprintf(ubootvar, "ubootenv.var.%s_x", keyValue);
     position[0] = getBootenvInt(ubootvar, 0);
     sprintf(ubootvar, "ubootenv.var.%s_y", keyValue);
@@ -1412,6 +1463,8 @@ void DisplayMode::getPosition(const char* curMode, int *position) {
     position[2] = getBootenvInt(ubootvar, defaultWidth);
     sprintf(ubootvar, "ubootenv.var.%s_h", keyValue);
     position[3] = getBootenvInt(ubootvar, defaultHeight);
+    mutex_unlock(&mEnvLock);
+
 }
 
 void DisplayMode::setPosition(int left, int top, int width, int height) {
@@ -1446,6 +1499,8 @@ void DisplayMode::setPosition(int left, int top, int width, int height) {
     } else if (strstr(curMode, MODE_4K2KSMPTE_PREFIX)) {
         strcpy(keyValue, "4k2ksmpte");
     }
+
+    mutex_lock(&mEnvLock);
     sprintf(ubootvar, "ubootenv.var.%s_x", keyValue);
     setBootEnv(ubootvar, x);
     sprintf(ubootvar, "ubootenv.var.%s_y", keyValue);
@@ -1454,6 +1509,8 @@ void DisplayMode::setPosition(int left, int top, int width, int height) {
     setBootEnv(ubootvar, w);
     sprintf(ubootvar, "ubootenv.var.%s_h", keyValue);
     setBootEnv(ubootvar, h);
+    mutex_unlock(&mEnvLock);
+
 }
 
 void DisplayMode::saveDeepColorAttr(const char* mode, const char* dcValue) {
@@ -1512,10 +1569,13 @@ bool DisplayMode::isDolbyVisionEnable() {
 
 void DisplayMode::setDolbyVisionEnable(int state) {
     char tvmode[MAX_STR_LEN] = {0};
+    char outputmode[MODE_LEN] = {0};
     int value_state = state;
+    pSysWrite->readSysfs(SYSFS_DISPLAY_MODE, outputmode);
     if (isTvSupportDolbyVision(tvmode))
         pSysWrite->writeSysfs(DISPLAY_HDMI_AVMUTE, "1");
     if (DOLBY_VISION_SET_DISABLE != value_state) {
+        pSysWrite->setProperty(PROP_DOLBY_VISION_ENABLE, "true");
         //if TV
         if (DISPLAY_TYPE_TV == mDisplayType) {
             setHdrMode(HDR_MODE_OFF);
@@ -1526,9 +1586,7 @@ void DisplayMode::setDolbyVisionEnable(int state) {
         //if OTT
         if ((DISPLAY_TYPE_MBOX == mDisplayType) || (DISPLAY_TYPE_REPEATER == mDisplayType)) {
             char mode[MAX_STR_LEN] = {0};
-            char outputmode[MODE_LEN] = {0};
             FormatColorDepth deepColor;
-            pSysWrite->readSysfs(SYSFS_DISPLAY_MODE, outputmode);
             if (isTvSupportDolbyVision(mode)) {
                 setBootEnv(UBOOTENV_ISBESTMODE, "false");
                 SYS_LOGI("Tv is Support DolbyVision, highest mode is [%s]", mode);
@@ -1560,21 +1618,22 @@ void DisplayMode::setDolbyVisionEnable(int state) {
                 char tmp[10];
                 sprintf(tmp, "%d", value_state);
                 pSysWrite->setProperty(PROP_DOLBY_VISION_TYPE, tmp);
-                char outputmode[MODE_LEN] = {0};
                 char tvmode[MODE_LEN] = {0};
                 for (int i = DISPLAY_MODE_TOTAL - 1; i >= 0; i--) {
                     if (strstr(mode, DISPLAY_MODE_LIST[i]) != NULL) {
                         strcpy(tvmode, DISPLAY_MODE_LIST[i]);
                     }
                 }
-                pSysWrite->readSysfs(SYSFS_DISPLAY_MODE, outputmode);
+                setDolbyVisionState = false;
                 if ((resolveResolutionValue(outputmode) > resolveResolutionValue(tvmode))
                         || (strstr(outputmode, "smpte") != NULL)) {
                     SYS_LOGI("CurMode[%s] is not support dolbyvision, need setmode to [%s]", outputmode, tvmode);
                     setSourceOutputMode(tvmode);
                 } else {
+                    pSysWrite->writeSysfs(SYSFS_DISPLAY_MODE, "null");
                     setSourceOutputMode(outputmode);
                 }
+                setDolbyVisionState = true;
             }
             pSysWrite->writeSysfs(DOLBY_VISION_POLICY_OLD, DV_POLICY_FOLLOW_SINK);
             pSysWrite->writeSysfs(DOLBY_VISION_HDR10_POLICY_OLD, DV_HDR10_POLICY);
@@ -1587,7 +1646,6 @@ void DisplayMode::setDolbyVisionEnable(int state) {
         pSysWrite->writeSysfs(DOLBY_VISION_MODE_OLD, DV_MODE_IPT_TUNNEL);
         pSysWrite->writeSysfs(DOLBY_VISION_ENABLE, DV_ENABLE);
         pSysWrite->writeSysfs(DOLBY_VISION_MODE, DV_MODE_IPT_TUNNEL);
-        pSysWrite->setProperty(PROP_DOLBY_VISION_ENABLE, "true");
         usleep(100000);//100ms
         if (DISPLAY_TYPE_TV == mDisplayType) {
             setHdrMode(HDR_MODE_AUTO);
@@ -1595,6 +1653,7 @@ void DisplayMode::setDolbyVisionEnable(int state) {
         initGraphicsPriority();
         SYS_LOGI("setDolbyVisionEnable Enable [%d]", isDolbyVisionEnable());
     } else {
+        pSysWrite->setProperty(PROP_DOLBY_VISION_ENABLE, "false");
         pSysWrite->writeSysfs(DOLBY_VISION_POLICY_OLD, DV_POLICY_FORCE_MODE);
         pSysWrite->writeSysfs(DOLBY_VISION_MODE_OLD, DV_MODE_BYPASS);
         pSysWrite->writeSysfs(DOLBY_VISION_POLICY, DV_POLICY_FORCE_MODE);
@@ -1602,9 +1661,13 @@ void DisplayMode::setDolbyVisionEnable(int state) {
         usleep(100000);//100ms
         pSysWrite->writeSysfs(DOLBY_VISION_ENABLE_OLD, DV_DISABLE);
         pSysWrite->writeSysfs(DOLBY_VISION_ENABLE, DV_DISABLE);
-        pSysWrite->setProperty(PROP_DOLBY_VISION_ENABLE, "false");
         if (DISPLAY_TYPE_TV == mDisplayType) {
             setHdrMode(HDR_MODE_AUTO);
+        }
+        char mode[MAX_STR_LEN] = {0};
+        if (isTvSupportDolbyVision(mode)) {
+            pSysWrite->writeSysfs(SYSFS_DISPLAY_MODE, "null");
+            setSourceOutputMode(outputmode);
         }
         SYS_LOGI("setDolbyVisionEnable Enable [%d]", isDolbyVisionEnable());
     }
@@ -1802,6 +1865,11 @@ void DisplayMode::onTxEvent (char* switchName, char* hpdstate, int outputState) 
         notifyEvent((hpdstate[0] == '1') ? EVENT_HDMI_PLUG_IN : EVENT_HDMI_PLUG_OUT);
         if (hpdstate[0] == '1')
             dumpCaps();
+    }
+    if (strstr(mRebootMode, "quiescent")) {
+        SYS_LOGI("reset mRebootMode normal\n");
+        strcpy(mRebootMode, "normal");
+        setBootEnv(UBOOTENV_REBOOT_MODE, mRebootMode);
     }
 #endif
     setSourceDisplay((output_mode_state)outputState);

@@ -27,8 +27,6 @@
 
 
 #define PI 3.14159265358979
-
-
 CPQControl *CPQControl::mInstance = NULL;
 CPQControl *CPQControl::GetInstance()
 {
@@ -79,7 +77,7 @@ CPQControl::CPQControl()
             SYS_LOGD("open overscan DB success!\n");
         }
     }
-    //SSM file chack
+    //SSM file check
     mSSMAction = SSMAction::getInstance();
     mSSMAction->setObserver(this);
     mSSMAction->init();
@@ -115,9 +113,8 @@ CPQControl::CPQControl()
     if (isFileExist(LDIM_PATH)) {
         SetDynamicBacklight((Dynamic_backlight_status_t)GetDynamicBacklight(), 1);
     } else if (isFileExist(BACKLIGHT_PATH)) {//local diming or pwm
-        mDynamicBackLight = CDynamicBackLight::getInstance();
-        mDynamicBackLight->setObserver(this);
-        mDynamicBackLight->startDected();
+        mDynamicBackLight.setObserver(this);
+        mDynamicBackLight.startDected();
     } else {
         SYS_LOGD("No auto backlight moudle!\n");
     }
@@ -5240,6 +5237,25 @@ void CPQControl::resetAllUserSettingParam()
 
     config_val = mPQConfigFile->GetInt(CFG_SECTION_PQ, CFG_EYEPROJECTMODE_DEF, 0);
     mSSMAction->SSMSaveEyeProtectionMode(config_val);
+
+    buf = mPQConfigFile->GetString(CFG_SECTION_HDMI, CFG_EDID_VERSION_DEF, NULL);
+    if (strcmp(buf, "edid_20") == 0) {
+        mSSMAction->SSMEdidRestoreDefault(1);
+    } else {
+        mSSMAction->SSMEdidRestoreDefault(0);
+    }
+
+    config_val = mPQConfigFile->GetInt(CFG_SECTION_HDMI, CFG_HDCP_SWITCHER_DEF, 0);
+    mSSMAction->SSMHdcpSwitcherRestoreDefault(0);
+
+    buf = mPQConfigFile->GetString(CFG_SECTION_HDMI, CFG_COLOR_RANGE_MODE_DEF, NULL);
+    if (strcmp(buf, "full") == 0) {
+        mSSMAction->SSMSColorRangeModeRestoreDefault(1);
+    } else if (strcmp(buf, "limit") == 0) {
+        mSSMAction->SSMSColorRangeModeRestoreDefault(2);
+    } else {
+        mSSMAction->SSMSColorRangeModeRestoreDefault(0);
+    }
 
     return;
 }

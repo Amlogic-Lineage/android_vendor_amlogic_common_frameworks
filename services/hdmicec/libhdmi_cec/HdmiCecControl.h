@@ -1,8 +1,21 @@
+/*
+ * Copyright (c) 2014 Amlogic, Inc. All rights reserved.
+ *
+ * This source code is subject to the terms and conditions defined in the
+ * file 'LICENSE' which is part of this source code package.
+ *
+ * Description:
+ *     AMLOGIC
+ */
+
 #ifndef _HDMI_CEC_CONTROL_CPP_
 #define _HDMI_CEC_CONTROL_CPP_
 
 #include <pthread.h>
 #include <HdmiCecBase.h>
+#include <CMsgQueue.h>
+#include "SystemControlClient.h"
+#include "TvServerHidlClient.h"
 #include <utils/StrongPointer.h>
 
 #define CEC_FILE        "/dev/cec"
@@ -36,6 +49,15 @@
 #define DEV_TYPE_PURE_CEC_SWITCH        6
 #define DEV_TYPE_VIDEO_PROCESSOR        7
 
+
+#define ADDR_BROADCAST  15
+#define DELAY_TIMEOUT_MS  7000
+
+#define HDMIRX_SYSFS                    "/sys/class/hdmirx/hdmirx0/cec"
+#define CEC_STATE_BOOT_ENABLED          "2"
+#define CEC_STATE_ENABLED               "1"
+#define CEC_STATE_UNABLED               "0"
+
 namespace android {
 
 //must sync with hardware\libhardware\include\hardware\Hdmi_cec.h
@@ -51,6 +73,13 @@ enum cec_message_para_value{
     CEC_KEYCODE_POWER = 0x40,
     CEC_KEYCODE_ROOT_MENU = 0x09,
     CEC_KEYCODE_POWER_ON_FUNCTION = 0x6D
+};
+
+enum send_message_result{
+    SUCCESS = 0,
+    NACK = 1, // not acknowledged
+    BUSY = 2, // bus is busy
+    FAIL = 3,
 };
 
 /**
@@ -70,7 +99,12 @@ enum cec_message_para_value{
  * @mExtendControl   Flag for extend cec device
  */
 typedef struct hdmi_device {
-    int                         mDeviceType;
+    int                         *mDeviceTypes;
+    int                         *mAddedPhyAddrs;
+    int                         mTotalDevice;
+    bool                        isTvDeviceType;
+    bool                        isPlaybackDeviceType;
+    bool                        isAvrDeviceType;
     int                         mAddrBitmap;
     int                         mFd;
     bool                        isCecEnabled;
@@ -82,6 +116,9 @@ typedef struct hdmi_device {
     bool                        mRun;
     bool                        mExited;
     int                         mExtendControl;
+    bool                        mFilterOtpEnabled;
+    int                         mSelectedPortId;
+    int                         mTvOsdName;
 } hdmi_device_t;
 
 class HdmiCecControl : public HdmiCecBase {
@@ -105,9 +142,33 @@ public:
     virtual bool isConnected(int port);
 
     void setEventObserver(const sp<HdmiCecEventListener> &eventListener);
+protected:
+    class MsgHandler: public CMsgQueueThread {
+    public:
+        static const int MSG_FILTER_OTP_TIMEOUT = 0;
+        static const int GET_MENU_LANGUAGE = 1;
+        static const int SET_MENU_LANGUAGE = 2;
+        static const int GIVE_OSD_NAEM = 3;
+        static const int SET_OSD_NAEM = 4;
+        MsgHandler(HdmiCecControl *hdmiControl);
+        ~MsgHandler();
+    private:
+        virtual void handleMessage (CMessage &msg);
+        HdmiCecControl *mControl;
+    };
+public:
+    class TvEventListner: public TvListener {
+    public:
+        static const int TV_EVENT_SOURCE_SWITCH = 506;
+        TvEventListner(HdmiCecControl *hdmiControl);
+        ~TvEventListner();
+        virtual void notify(const tv_parcel_t &parcel);
+    private:
+        HdmiCecControl *mControl;
+    };
 private:
     void init();
-
+    void getDeviceTypes();
     void getBootConnectStatus();
     static void *__threadLoop(void *data);
     void threadLoop();
@@ -116,13 +177,24 @@ private:
     int send(const cec_message_t* message);
     int readMessage(unsigned char *buf, int msgCount);
     void checkConnectStatus();
+    bool mFirstEnableCec;
 
     bool assertHdmiCecDevice();
     bool hasHandledByExtend(const cec_message_t* message);
-    bool isWakeUpMsg(char *msgBuf, int len, int deviceType);
-    bool messageValidate(hdmi_cec_event_t* event, int deviceType);
+    int preHandleBeforeSend(const cec_message_t* message);
+    bool isWakeUpMsg(char *msgBuf, int len);
+    bool messageValidate(hdmi_cec_event_t* event);
+    bool handleOTPMsg(hdmi_cec_event_t* event);
+    bool handleSetMenuLanguage(hdmi_cec_event_t* event);
+    void handleHotplug(int port, bool connected);
+    void getDeviceExtraInfo(int flag);
     hdmi_device_t mCecDevice;
     sp<HdmiCecEventListener> mEventListener;
+    sp<SystemControlClient> mSystemControl;
+    sp<TvServerHidlClient> mTvSession;
+    sp<HdmiCecControl::TvEventListner> mTvEventListner;
+    MsgHandler mMsgHandler;
+    mutable Mutex mLock;
 };
 
 

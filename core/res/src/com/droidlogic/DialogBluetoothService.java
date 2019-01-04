@@ -1,33 +1,11 @@
-/*-----------------------------------------------------------------------------
- *                 @@@           @@                  @@
- *                @@@@@          @@   @@             @@
- *                @@@@@          @@                  @@
- *       .@@@@@.  @@@@@      @@@ @@   @@     @@@@    @@     @@@       @@@
- *     @@@@@@   @@@@@@@    @@   @@@   @@        @@   @@   @@   @@   @@   @@
- *    @@@@@    @@@@@@@@    @@    @@   @@    @@@@@@   @@   @@   @@   @@   @@
- *   @@@@@@     @@@@@@@    @@    @@   @@   @@   @@   @@   @@   @@   @@   @@
- *   @@@@@@@@     @@@@@    @@   @@@   @@   @@   @@   @@   @@   @@   @@   @@
- *   @@@@@@@@@@@    @@@     @@@@ @@   @@    @@@@@    @@     @@@       @@@@@
- *    @@@@@@@@@@@  @@@@                                                  @@
- *     @@@@@@@@@@@@@@@@                                                  @@
- *       "@@@@@"  @@@@@    S  E  M  I  C  O  N  D  U  C  T  O  R     @@@@@
+/*
+ * Copyright (c) 2014 Amlogic, Inc. All rights reserved.
  *
+ * This source code is subject to the terms and conditions defined in the
+ * file 'LICENSE' which is part of this source code package.
  *
- * Copyright (C) 2014 Dialog Semiconductor GmbH and its Affiliates, unpublished
- * work. This computer program includes Confidential, Proprietary Information
- * and is a Trade Secret of Dialog Semiconductor GmbH and its Affiliates. All
- * use, disclosure, and/or  reproduction is prohibited unless authorized in
- * writing. All Rights Reserved.
- *
- * Filename: BluetoothLeService.java
- * Purpose : Service to connect and communicate with Bluetooth LE devices
- * Created : 08-2014
- * By      : Johannes Steensma, Taronga Technology Inc.
- * Country : USA
- *
- *-----------------------------------------------------------------------------
- *
- *-----------------------------------------------------------------------------
+ * Description:
+ *     AMLOGIC DialogBluetoothService
  */
 
 package com.droidlogic;
@@ -59,8 +37,14 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import android.media.AudioManager;
 
+import java.lang.reflect.AccessibleObject;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
+
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothHidHost;
+//import android.bluetooth.BluetoothHidHost;
 
 /**
  * Service for managing connection and data communication with a GATT server hosted on a
@@ -77,6 +61,9 @@ public class DialogBluetoothService extends Service {
         "RemoteB008",
         "Amlogic_RC"
     };
+
+    public static final int DEVICE_BIT_IN = 0x80000000;
+    public static final int DEVICE_IN_WIRED_HEADSET = DEVICE_BIT_IN | 0x10;
 
     // Time to connect to bonded devices for boot
     private static final int CONNECT_DELAY_MS_BOOT = 100;
@@ -160,12 +147,17 @@ public class DialogBluetoothService extends Service {
             final BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
             String macAddress = device.getAddress();
             String deviceName = device.getName();
-            if (BluetoothHidHost.ACTION_CONNECTION_STATE_CHANGED.equals(action)) {
+            /*if (BluetoothHidHost.ACTION_CONNECTION_STATE_CHANGED.equals(action)) {
             }
-            else if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
+            else */if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
                 Log.i(TAG, ">ACL LINK CONNECTED ["+device.getName()+"] - checking for supported devices after delay");
 
                 if (isRemoteAudioCapable(device)) {
+                    Log.i(TAG, "pending.isEmpty()="+pending.isEmpty());
+                    if (!pending.isEmpty()) {
+                        mBluetoothGatt = null;
+                        mConnectionState = STATE_DISCONNECTED;
+                    }
                     pending.add(device);
                     mHandler.removeCallbacks(mConnRunnable);
                     mHandler.postDelayed(mConnRunnable, CONNECTION_DELAY_MS);
@@ -201,7 +193,7 @@ public class DialogBluetoothService extends Service {
         public void run() {
             if (mConnectionState == STATE_DISCONNECTED && mBluetoothGatt == null) {
                 Log. i(TAG, "mConnRunnable, looking on bonded devices in order to find connection target...");
-                pending.clear();
+                //pending.clear();
                 connectToBondedDevices();
             } else {
                 Log.e(TAG, "Ignoring connection attempt. State: " + mConnectionState);
@@ -294,7 +286,7 @@ public class DialogBluetoothService extends Service {
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECT_REQUESTED);
         filter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
         //filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
-        filter.addAction(BluetoothHidHost.ACTION_CONNECTION_STATE_CHANGED);
+        //filter.addAction(BluetoothHidHost.ACTION_CONNECTION_STATE_CHANGED);
         registerReceiver(receiver, filter);
 
         // On service start, check for supported devices
@@ -655,11 +647,39 @@ public class DialogBluetoothService extends Service {
         for (Iterator<BluetoothDevice> it = bondedDevices.iterator(); it.hasNext();) {
             BluetoothDevice dev = (BluetoothDevice) it.next();
             if (isRemoteAudioCapable(dev)) {
+
+            /* @hidden-api-issue-start*/
                 Log.i(TAG, "amlogic rc " + (status == 1 ? "input" : "remove"));
                 connectedState = status;
-                mAudioManager.setWiredDeviceConnectionState(AudioManager.DEVICE_IN_WIRED_HEADSET, connectedState, dev.getAddress(), dev.getName());
+                //mAudioManager.setWiredDeviceConnectionState(AudioManager.DEVICE_IN_WIRED_HEADSET, connectedState, dev.getAddress(), dev.getName());
+                setWiredDeviceConnectionState(/*AudioManager.*/DEVICE_IN_WIRED_HEADSET, connectedState, dev.getAddress(), dev.getName());
+           /* @hidden-api-issue-end */
                 break;
             }
+        }
+    }
+
+    private void setWiredDeviceConnectionState(int type, int state, String address, String name) {
+        try {
+            Class<?> audioManager = Class.forName("android.media.AudioManager");
+            Method setwireState = audioManager.getMethod("setWiredDeviceConnectionState",
+                                    int.class, int.class, String.class, String.class);
+
+            setwireState.invoke(mAudioManager, type, state, address, name);
+
+        } catch(ClassNotFoundException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        } catch (NoSuchMethodException ex) {
+            ex.printStackTrace();
+        } catch (IllegalArgumentException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
         }
     }
 

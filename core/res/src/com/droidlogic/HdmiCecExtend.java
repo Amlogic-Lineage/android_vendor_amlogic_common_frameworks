@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) 2014 Amlogic, Inc. All rights reserved.
+ *
+ * This source code is subject to the terms and conditions defined in the
+ * file 'LICENSE' which is part of this source code package.
+ *
+ * Description:
+ *     AMLOGIC HdmiCecExtend
+ */
 
 package com.droidlogic;
 
@@ -12,17 +21,23 @@ import android.hardware.hdmi.HdmiPlaybackClient;
 import android.hardware.hdmi.HdmiHotplugEvent;
 import android.hardware.hdmi.HdmiPortInfo;
 import android.hardware.hdmi.HdmiPlaybackClient.OneTouchPlayCallback;
-import android.hardware.hdmi.IHdmiControlService;
-import android.util.Slog;
+//import android.hardware.hdmi.IHdmiControlService;
+import android.util.Log;
 import android.net.Uri;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
-import android.os.UserHandle;
-import android.os.ServiceManager;
+//import android.os.UserHandle;
+//import android.os.ServiceManager;
 import android.os.Handler;
-import com.android.internal.app.LocalePicker;
-import com.android.internal.app.LocalePicker.LocaleInfo;
+//import com.android.internal.app.LocalePicker;
+//import com.android.internal.app.LocalePicker.LocaleInfo;
+
+
+import java.lang.reflect.AccessibleObject;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+
 
 import java.util.Locale;
 import java.util.List;
@@ -60,6 +75,7 @@ import vendor.amlogic.hardware.hdmicec.V1_0.IDroidHdmiCecCallback;
 import vendor.amlogic.hardware.hdmicec.V1_0.OptionKey;
 import vendor.amlogic.hardware.hdmicec.V1_0.Result;
 import vendor.amlogic.hardware.hdmicec.V1_0.SendMessageResult;
+import com.droidlogic.app.SystemControlManager;
 
 public class HdmiCecExtend implements VendorCommandListener, HotplugEventListener {
     private final String TAG = "HdmiCecExtend";
@@ -138,6 +154,10 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
     static final int MESSAGE_CDC_MESSAGE = 0xF8;
     static final int MESSAGE_ABORT = 0xFF;
 
+    static final int CEC_KEYCODE_POWER = 0x40;
+    static final int CEC_KEYCODE_ROOT_MENU = 0x09;
+    static final int CEC_KEYCODE_POWER_ON_FUNCTION = 0x6D;
+
     // Send result codes. It should be consistent with hdmi_cec.h's send_message error code.
     static final int SEND_RESULT_SUCCESS = 0;
     static final int SEND_RESULT_NAK = 1;
@@ -211,6 +231,8 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
     private PowerManager mPowerManager;
     private ActiveWakeLock mWakeLock;
 
+    private final SystemControlManager mSystemControl;
+
     private long mNativePtr = 0;
     private final Object mLock = new Object();
     private IDroidHdmiCEC mProxy = null;
@@ -221,6 +243,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
     private static final int HDMI_EVENT_ADD_LOGICAL_ADDRESS = 4;
     private static final int HDMI_EVENT_RECEIVE_MESSAGE = 9;
     static final String PROPERTY_DEVICE_TYPE = "ro.hdmi.device_type";
+    static final String UBOOTENV_REBOOT_MODE = "ubootenv.var.reboot_mode_android";
     /*
     static {
         System.loadLibrary("hdmicec_jni");
@@ -237,7 +260,12 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
                 SendGetMenuLanguage(ADDR_TV);
                 break;
             case MSG_ONE_TOUCH_PLAY:
-                mHandler.postDelayed(mDelayedRun, ONE_TOUCH_PLAY_DELAY);
+                String mode = mSystemControl.getBootenv(UBOOTENV_REBOOT_MODE, "normal");
+                Log.i(TAG, "rebootmode: " + mode);
+                if (!mode.equals("quiescent")) {
+                    Log.i(TAG, "rebootmode noraml");
+                    mHandler.postDelayed(mDelayedRun, ONE_TOUCH_PLAY_DELAY);
+                }
                 break;
             default:
                 break;
@@ -253,20 +281,19 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
         mControl = (HdmiControlManager) mContext.getSystemService(Context.HDMI_CONTROL_SERVICE);
         mPowerManager = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
         mSettingsObserver = new SettingsObserver(mHandler);
+        mSystemControl = SystemControlManager.getInstance();
         registerContentObserver();
         if (mControl != null) {
             mPlayback = mControl.getPlaybackClient();
             if (mPlayback != null) {
                 mPlayback.setVendorCommandListener(this);
                 mVendorId = getCecVendorId();
-                if (!mLanguangeChanged) {
-                    mHandler.removeMessages(MSG_ONE_TOUCH_PLAY);
-                    mHandler.sendMessageDelayed(Message.obtain(mHandler, MSG_ONE_TOUCH_PLAY), LONG_MILIS_DELAY);
-                }
+                mHandler.removeMessages(MSG_ONE_TOUCH_PLAY);
+                mHandler.sendMessageDelayed(Message.obtain(mHandler, MSG_ONE_TOUCH_PLAY), LONG_MILIS_DELAY);
             }
             mControl.addHotplugEventListener(this);
         } else {
-            Slog.d(TAG, "can't find HdmiControlManager");
+            Log.d(TAG, "can't find HdmiControlManager");
         }
         mLocalDevices = getIntList(SystemProperties.get(PROPERTY_DEVICE_TYPE));
         connectToProxy();
@@ -280,7 +307,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
 
     @Override
     public void onReceived(HdmiHotplugEvent event) {
-        Slog.d(TAG, "HdmiHotplugEvent, connected:" + event.isConnected());
+        Log.d(TAG, "HdmiHotplugEvent, connected:" + event.isConnected());
         if (mPlayback != null) {
             updatePortInfo();
             if (!(event.isConnected() && !mLanguangeChanged)) {
@@ -289,7 +316,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
             }
             if (event.isConnected()) {
                 mHandler.removeMessages(MSG_ONE_TOUCH_PLAY);
-                mHandler.sendMessageDelayed(Message.obtain(mHandler, MSG_ONE_TOUCH_PLAY), ONE_TOUCH_PLAY_DELAY);
+                mHandler.sendMessageDelayed(Message.obtain(mHandler, MSG_ONE_TOUCH_PLAY), ONE_TOUCH_PLAY_DELAY*3);
            }
         }
     }
@@ -302,7 +329,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
      */
     @Override
     public void onControlStateChanged(boolean enabled, int reason) {
-        Slog.d(TAG, "enabled = " + enabled + ", reason = " + reason);
+        Log.d(TAG, "enabled = " + enabled + ", reason = " + reason);
         switch (reason) {
             case HdmiControlManager.CONTROL_STATE_CHANGED_REASON_WAKEUP:
                 if (enabled) {
@@ -362,21 +389,6 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
         }
     }
 
-    private final OneTouchPlayCallback mOneTouchPlayCallback = new OneTouchPlayCallback () {
-        @Override
-        public void onComplete(int result) {
-            Slog.d(TAG, "oneTouchPlay:" + result);
-            switch (result) {
-            case HdmiControlManager.RESULT_SUCCESS:
-            case HdmiControlManager.RESULT_TIMEOUT:
-                if (mLanguangeChanged == false) {
-                    mHandler.sendMessageDelayed(Message.obtain(mHandler, MSG_GET_MENU_LANGUAGE), MILIS_DELAY);
-                }
-                break;
-            }
-        }
-    };
-
     public void sleep(int ms) {
         try {
             Thread.sleep(ms);
@@ -387,7 +399,10 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
 
     public boolean updateLanguage(Locale locale) {
         try {
-            LocalePicker.updateLocale(locale);
+            //LocalePicker.updateLocale(locale);
+            Class<?> lp = Class.forName("com.android.internal.app.LocalePicker");
+            Method updatelocale = lp.getMethod("updateLocale", Locale.class);
+            updatelocale.invoke(null, locale);
             return true;
         } catch (Exception e) {
             e.printStackTrace();
@@ -396,7 +411,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
     }
 
     public void onLanguageChange(String iso3Language) {
-        Slog.d(TAG, "onLanguageChange, iso3Language: " + iso3Language);
+        Log.d(TAG, "onLanguageChange, iso3Language: " + iso3Language);
 
         if (iso3Language.equals("chi") || iso3Language.equals("zho")) {
             HdmiCecLanguageHelp cecLanguage = new HdmiCecLanguageHelp(iso3Language);
@@ -414,11 +429,11 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
             // due to the limitation of CEC. See the warning below.
             return;
         }
-        Slog.d(TAG, "onLanguageChange, change language");
+        Log.d(TAG, "onLanguageChange, change language");
 
         // Don't use Locale.getAvailableLocales() since it returns a locale
         // which is not available on Settings.
-        final List<LocaleInfo> localeInfos = LocalePicker.getAllAssetLocales(mContext, false);
+        /*final List<LocaleInfo> localeInfos = LocalePicker.getAllAssetLocales(mContext, false);
         for (LocaleInfo localeInfo : localeInfos) {
             if (localeInfo.getLocale().getISO3Language().equals(iso3Language)) {
                 // WARNING: CEC adopts ISO/FDIS-2 for language code, while
@@ -433,13 +448,44 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
                 LocalePicker.updateLocale(localeInfo.getLocale());
                 mLanguangeChanged = true;
             }
+        }*/
+        /* com.droidlogic is system signed, it can still use the hidden api, use reflect to avoid build problem */
+        /* TODO: use the IActivityManager Api */
+        try {
+            Class<?> lp = Class.forName("com.android.internal.app.LocalePicker");
+            Class<?> lpiClass = Class.forName("com.android.internal.app.LocalePicker.LocaleInfo");
+            Method getAllAssetLocales = lp.getMethod("getAllAssetLocales", Context.class, boolean.class);
+            Method getlocale = lpiClass.getMethod("getLocale", null);
+
+            final List localeInfos = (List)getAllAssetLocales.invoke(null, mContext, false);
+            for (Object o : localeInfos) {
+                Locale locale = (Locale)getlocale.invoke(o, null);
+                if (locale.getISO3Language().equals(iso3Language)) {
+                    updateLanguage(locale);
+                    mLanguangeChanged = true;
+                }
+            }
+        } catch (Exception e) {
+                e.printStackTrace();
         }
+
         mLanguangeChanged = false;
+    }
+
+    private void wakeUp(long time, String reason) {
+        try {
+            Class<?> cls = Class.forName("android.os.PowerManager");
+            Method method = cls.getMethod("wakeUp", long.class, String.class);
+            method.invoke(mPowerManager, time, reason);
+        } catch(Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void onCecMessageRx(byte[] msg) {
         int initiator = 0;
         int opcode = 0;
+        long time = 0;
         if (msg.length <= 1) {
             return;
         }
@@ -448,14 +494,23 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
         if (mPhyAddr == -1) {
             mPhyAddr = getCecPhysicalAddress();
         }
-        Slog.d(TAG, "onCecMessageRx " + String.format("intitiator = 0x%02x", initiator) + String.format(" opcode = 0x%02x", opcode));
+        Log.d(TAG, "onCecMessageRx " + String.format("intitiator = 0x%02x", initiator) + String.format(" opcode = 0x%02x", opcode));
         /* TODO: process messages service can't process */
         switch (opcode) {
         case MESSAGE_IMAGE_VIEW_ON:
         case MESSAGE_TEXT_VIEW_ON:
-            long time = SystemClock.uptimeMillis();
-            mPowerManager.wakeUp(time, "android.policy:POWER");
+        case MESSAGE_SYSTEM_AUDIO_MODE_REQUEST:
+            time = SystemClock.uptimeMillis();
+            wakeUp(time, "android.policy:POWER");
             break;
+        case MESSAGE_USER_CONTROL_PRESSED:
+            int para = (msg[2] & 0xFF);
+            if (para == CEC_KEYCODE_POWER || para == CEC_KEYCODE_ROOT_MENU ||  para == CEC_KEYCODE_POWER_ON_FUNCTION) {
+                time = SystemClock.uptimeMillis();
+                wakeUp(time, "android.policy:POWER");
+            }
+            break;
+        /*
         case MESSAGE_SET_MENU_LANGUAGE:
             if (isAutoChangeLanguageOn()) {
                 try {
@@ -464,17 +519,18 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
                     String iso3Language = new String(lan, 0, 3, "US-ASCII");
                     onLanguageChange(iso3Language);
                 } catch (UnsupportedEncodingException e) {
-                    Slog.d(TAG, "process MESSAGE_SET_MENU_LANGUAGE failed");
+                    Log.d(TAG, "process MESSAGE_SET_MENU_LANGUAGE failed");
                 }
             }
             break;
+        */
         default:
             break;
         }
     }
 
     private void onAddAddress(int addr) {
-        Slog.d(TAG, "onAddressAllocated:" + String.format("0x%02x", addr));
+        Log.d(TAG, "onAddressAllocated:" + String.format("0x%02x", addr));
         mHandler.removeMessages(MSG_ONE_TOUCH_PLAY);
         mHandler.sendMessageDelayed(Message.obtain(mHandler, MSG_ONE_TOUCH_PLAY), ONE_TOUCH_PLAY_DELAY);
     }
@@ -494,6 +550,18 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
                     }
                 }
             }).start();
+        }
+    };
+
+    private final OneTouchPlayCallback mOneTouchPlayCallback = new OneTouchPlayCallback () {
+        @Override
+        public void onComplete(int result) {
+            Log.d(TAG, "OneTouchPlayCallback, onComplete: " + result);
+            switch (result) {
+            case HdmiControlManager.RESULT_SUCCESS:
+            case HdmiControlManager.RESULT_TIMEOUT:
+                break;
+            }
         }
     };
 
@@ -581,7 +649,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
         @Override
         public void onChange(boolean selfChange, Uri uri) {
             String option = uri.getLastPathSegment();
-            Slog.d(TAG, "onChange, option = " + option);
+            Log.d(TAG, "onChange, option = " + option);
             switch (option) {
                 case HdmiCecManager.HDMI_CONTROL_ONE_TOUCH_PLAY_ENABLED:
                     break;
@@ -607,8 +675,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
                 HdmiCecManager.HDMI_CONTROL_AUTO_CHANGE_LANGUAGE_ENABLED
         };
         for (String s : settings) {
-            resolver.registerContentObserver(Global.getUriFor(s), false, mSettingsObserver,
-                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Global.getUriFor(s), false, mSettingsObserver);
         }
     }
 
@@ -626,7 +693,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
         synchronized (mLock) {
             mNativePtr = nativeInit(this);
          }
-        Slog.d(TAG, "init, mNativePtr = " + mNativePtr);
+        Log.d(TAG, "init, mNativePtr = " + mNativePtr);
      }
 
     private void connectToProxy() {
@@ -640,14 +707,14 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
                 mHdmiCecCallback = new HdmiCecCallback(this);
                 mProxy.setCallback(mHdmiCecCallback, ConnectType.TYPE_EXTEND);
             } catch (NoSuchElementException e) {
-                Slog.e(TAG, "connectToProxy: hdmicecd service not found."
+                Log.e(TAG, "connectToProxy: hdmicecd service not found."
                         + " Did the service fail to start?", e);
             } catch (RemoteException e) {
-                Slog.e(TAG, "connectToProxy: hdmicecd service not responding.", e);
+                Log.e(TAG, "connectToProxy: hdmicecd service not responding.", e);
             }
         }
 
-        Slog.d(TAG, "connect to hdmicecd service success.");
+        Log.d(TAG, "connect to hdmicecd service success.");
     }
 
     final class DeathRecipient implements HwBinder.DeathRecipient {
@@ -657,7 +724,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
         @Override
         public void serviceDied(long cookie) {
             if (HDMICEC_EXTEND_COOKIE == cookie) {
-                Slog.e(TAG, "hdmicecd service died cookie: " + cookie);
+                Log.e(TAG, "hdmicecd service died cookie: " + cookie);
                 synchronized (mLock) {
                     mProxy = null;
                 }
@@ -673,11 +740,11 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
             try {
                 list.add(Integer.parseInt(item));
             } catch (NumberFormatException e) {
-                Slog.e(TAG, "Can't parseInt: " + item);
+                Log.e(TAG, "Can't parseInt: " + item);
             }
         }
         return Collections.unmodifiableList(list);
-    }
+   }
 
     private int getCecPhysicalAddress() {
         int ret = 0;
@@ -686,7 +753,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
                 ret = nativeGetPhysicalAddr(mNativePtr);
             }
         }
-        Slog.d(TAG, String.format("getCecPhysicalAddress = %x", ret));
+        Log.d(TAG, String.format("getCecPhysicalAddress = %x", ret));
         return ret;
     }
 
@@ -697,7 +764,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
                 ret = nativeGetVendorId(mNativePtr);
             }
         }
-        Slog.d(TAG, "getCecVendorId, ret = " + ret);
+        Log.d(TAG, "getCecVendorId, ret = " + ret);
         return ret;
     }
 
@@ -708,7 +775,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
                 ret = nativeGetCecVersion(mNativePtr);
             }
         }
-        Slog.d(TAG, "getCecVersion, ret = " + ret);
+        Log.d(TAG, "getCecVersion, ret = " + ret);
         return ret;
     }
 
@@ -719,7 +786,7 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
                 ret = nativeSendCecMessage(mNativePtr, dest, body);
             }
         }
-        Slog.d(TAG, "sendCecMessage, " + toString(dest, body));
+        Log.d(TAG, "sendCecMessage, " + toString(dest, body));
         return ret;
     }
 
@@ -736,11 +803,11 @@ public class HdmiCecExtend implements VendorCommandListener, HotplugEventListene
                 try {
                     ret = mProxy.sendMessage(message, true);
                 } catch (RemoteException e) {
-                    Slog.e(TAG, "sendCecMessage: hdmicecd service not responding.", e);
+                    Log.e(TAG, "sendCecMessage: hdmicecd service not responding.", e);
                 }
             }
         }
-        Slog.d(TAG, "sendCecMessage, " + toString(dest, body));
+        Log.d(TAG, "sendCecMessage, " + toString(dest, body));
         return ret;
     }
 

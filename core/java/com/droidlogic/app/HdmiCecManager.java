@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2014 Amlogic, Inc. All rights reserved.
+ *
+ * This source code is subject to the terms and conditions defined in the
+ * file 'LICENSE' which is part of this source code package.
+ *
+ * Description:
+ *     AMLOGIC HdmiCecManager
+ */
+
 package com.droidlogic.app;
 
 import android.content.Context;
@@ -48,7 +58,7 @@ public class HdmiCecManager {
 
     public HdmiCecManager(Context context) {
         mContext = context;
-        mSystemControlManager = new SystemControlManager(context);
+        mSystemControlManager = SystemControlManager.getInstance();
     }
 
     public void initCec() {

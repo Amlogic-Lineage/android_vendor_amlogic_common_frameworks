@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2014 Amlogic, Inc. All rights reserved.
+ *
+ * This source code is subject to the terms and conditions defined in the
+ * file 'LICENSE' which is part of this source code package.
+ *
+ * Description:
+ *     AMLOGIC UsbCameraManager
+ */
+
 package com.droidlogic.app;
 
 import java.io.File;
@@ -11,15 +21,15 @@ import android.hardware.Camera.CameraInfo;
 import android.hardware.usb.UsbConstants;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbInterface;
-import android.hardware.ICameraService;
+//import android.hardware.ICameraService;
 import android.os.IBinder;
 import android.os.Binder;
 import android.os.DeadObjectException;
 import android.os.Parcel;
 import android.os.RemoteException;
 import android.os.UserHandle;
-import android.os.ServiceManager;
-import android.os.ServiceSpecificException;
+//import android.os.ServiceManager;
+//import android.os.ServiceSpecificException;
 import android.util.Log;
 
 public class UsbCameraManager {
@@ -36,7 +46,7 @@ public class UsbCameraManager {
     };
 
     private Context mContext;
-    private ICameraService mCameraService = null;
+    //private ICameraService mCameraService = null;
     public UsbCameraManager(Context context){
         mContext = context;
     }
@@ -236,7 +246,7 @@ public class UsbCameraManager {
                             homeIntent.addCategory(Intent.CATEGORY_HOME);
                             homeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                                     | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-                            mContext.startActivityAsUser(homeIntent, new UserHandle(UserHandle.USER_CURRENT));
+                            mContext.startActivity(homeIntent);
 
                             try{
                                 Thread.sleep(500);

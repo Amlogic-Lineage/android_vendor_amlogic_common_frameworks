@@ -21,6 +21,7 @@ import android.os.Parcel;
 import android.os.RemoteException;
 import android.util.Log;
 import java.lang.Thread.State;
+import java.lang.reflect.Method;
 
 import java.util.Map;
 import android.content.ContentResolver;
@@ -31,12 +32,21 @@ import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.InvocationTargetException;
+
+
 /**
  * Created by wangjian on 2014/4/17.
  */
 public class MediaPlayerExt extends MediaPlayer {
     private static final String TAG = "MediaPlayerExt";
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = true;
     private static final int FF_PLAY_TIME = 5000;
     private static final int FB_PLAY_TIME = 5000;
     private static final int BASE_SLEEP_TIME = 500;
@@ -52,6 +62,9 @@ public class MediaPlayerExt extends MediaPlayer {
     private OnBlurayListener mOnBlurayInfoListener = null;
 
     private EventHandler mEventHandler;
+
+    private MethodHandle h1;
+    private MethodHandles.Lookup lookup = MethodHandles.lookup();
 
     //must sync with IMediaPlayer.cpp (av\media\libmedia)
     private IBinder mIBinder = null; //IMediaPlayer
@@ -88,6 +101,9 @@ public class MediaPlayerExt extends MediaPlayer {
     private static final int SET_RETRANSMIT_ENDPOINT        = IBinder.FIRST_CALL_TRANSACTION + 29;
     private static final int GET_RETRANSMIT_ENDPOINT        = IBinder.FIRST_CALL_TRANSACTION + 30;
     private static final int SET_NEXT_PLAYER                = IBinder.FIRST_CALL_TRANSACTION + 31;
+
+    private final static String IMEDIA_PLAYER = "android.media.IMediaPlayer";
+    private static final int INVOKE_ID_GET_AM_TRACK_INFO        = 11;
 
     //must sync with IMediaPlayerService.cpp (av\media\libmedia)
     private IBinder mIBinderService = null; //IMediaPlayerService
@@ -404,6 +420,7 @@ public class MediaPlayerExt extends MediaPlayer {
         public int aformat;
         public int channel;
         public int sample_rate;
+        public String audioMime;
     }
 
     public class SubtitleInfo{
@@ -442,10 +459,17 @@ public class MediaPlayerExt extends MediaPlayer {
         public TsProgrameInfo[] tsprogrameInfo;
     }
 
-    public MediaInfo getMediaInfo() {
+   //getMediaInfo by invoke instead of getParameter (WL)
+    public MediaInfo getMediaInfo(MediaPlayerExt mp) {
         MediaInfo mediaInfo = new MediaInfo();
+        Parcel request = Parcel.obtain();
         Parcel p = Parcel.obtain();
-        getParameter(KEY_PARAMETER_AML_PLAYER_GET_MEDIA_INFO, p);
+        request.writeInterfaceToken(IMEDIA_PLAYER);
+        request.writeInt(INVOKE_ID_GET_AM_TRACK_INFO);
+        getMediaInfobyInvoke(request, p, mp);
+        //super.invoke(request, p);
+        //Parcel p = Parcel.obtain();
+        //getParameter(KEY_PARAMETER_AML_PLAYER_GET_MEDIA_INFO, p);
         mediaInfo.filename = p.readString();
         mediaInfo.duration = p.readInt();
         mediaInfo.file_size = p.readString();
@@ -485,6 +509,7 @@ public class MediaPlayerExt extends MediaPlayer {
             mediaInfo.audioInfo[j].aformat = p.readInt();
             mediaInfo.audioInfo[j].channel = p.readInt();
             mediaInfo.audioInfo[j].sample_rate = p.readInt();
+            mediaInfo.audioInfo[j].audioMime= p.readString();
             if (DEBUG) Log.i(TAG,"[getMediaInfo]audioInfo j:"+j+",index:"+mediaInfo.audioInfo[j].index+",id:"+mediaInfo.audioInfo[j].id+",aformat:"+mediaInfo.audioInfo[j].aformat);
             if (DEBUG) Log.i(TAG,"[getMediaInfo]audioInfo j:"+j+",channel:"+mediaInfo.audioInfo[j].channel+",sample_rate:"+mediaInfo.audioInfo[j].sample_rate);
         }
@@ -524,6 +549,30 @@ public class MediaPlayerExt extends MediaPlayer {
         p.recycle();
 
         return mediaInfo;
+    }
+
+    public void getMediaInfobyInvoke(Parcel p1, Parcel p2, MediaPlayerExt mp) {
+        Log.i(TAG,"[getMediaInfobyInvoke]mp:"+mp);
+        try {
+            Field allowedModes = MethodHandles.Lookup.class.getDeclaredField("allowedModes");
+            allowedModes.setAccessible(true);
+            allowedModes.set(lookup, -1);
+            h1 = lookup.findSpecial(MediaPlayer.class, "invoke", MethodType.methodType(void.class, Parcel.class, Parcel.class), MediaPlayerExt.class);
+            h1.invoke(mp, p1, p2);
+        } catch(ClassNotFoundException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (NoSuchMethodException ex) {
+            ex.printStackTrace();
+        } catch (NoSuchFieldException ex) {
+            ex.printStackTrace();
+        } catch (IllegalArgumentException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        } catch(Throwable t) {
+        }
     }
 
     public void setOnSeekCompleteListener (OnSeekCompleteListener listener) {
@@ -594,11 +643,11 @@ public class MediaPlayerExt extends MediaPlayer {
     }
 
     public void postEvent(int msg, int ext1, int ext2, Object obj) {
-        if (DEBUG) Log.i(TAG, "[postEvent]msg: " + msg);
+        /*if (DEBUG) Log.i(TAG, "[postEvent]msg: " + msg);
         if (mEventHandler != null) {
             Message m = mEventHandler.obtainMessage(msg, ext1, ext2, obj);
             mEventHandler.sendMessage(m);
-        }
+        }*/
     }
 
     private void OnFFCompletion() {

@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2014 Amlogic, Inc. All rights reserved.
+ *
+ * This source code is subject to the terms and conditions defined in the
+ * file 'LICENSE' which is part of this source code package.
+ *
+ * Description:
+ *     AMLOGIC SystemControlManager
+ */
+
 package com.droidlogic.app;
 
 import android.content.Context;
@@ -7,6 +17,7 @@ import android.os.Parcel;
 import android.os.RemoteException;
 import android.util.Log;
 
+import java.util.ArrayList;
 import java.util.NoSuchElementException;
 
 import android.hidl.manager.V1_0.IServiceManager;
@@ -35,17 +46,14 @@ public class SystemControlManager {
 
     private static final int SYSTEM_CONTROL_DEATH_COOKIE = 1000;
 
-    private static SystemControlManager mInstance = null;
+    private static SystemControlManager mInstance;
 
-    private Context mContext;
     private IBinder mIBinder = null;
 
     // Mutex for all mutable shared state.
     private final Object mLock = new Object();
 
-    public SystemControlManager(Context context) {
-        mContext = context;
-
+    private SystemControlManager() {
         try {
             boolean ret = IServiceManager.getService()
                     .registerForNotifications("vendor.amlogic.hardware.systemcontrol@1.0::ISystemControl", "", mServiceNotification);
@@ -59,23 +67,12 @@ public class SystemControlManager {
         connectToProxy();
     }
 
-    public SystemControlManager() {
-        try {
-            boolean ret = IServiceManager.getService()
-                    .registerForNotifications("vendor.amlogic.hardware.systemcontrol@1.0::ISystemControl", "", mServiceNotification);
-            if (!ret) {
-                Log.e(TAG, "Failed to register service start notification");
-            }
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to register service start notification", e);
-            return;
-        }
-        connectToProxy();
+    private static class InstanceHolder {
+        private static final SystemControlManager INSTANCE = new SystemControlManager();
     }
 
     public static SystemControlManager getInstance() {
-         if (null == mInstance) mInstance = new SystemControlManager();
-         return mInstance;
+         return InstanceHolder.INSTANCE;
      }
 
     private void connectToProxy() {
@@ -736,6 +733,7 @@ public class SystemControlManager {
         }
         return "";
     }
+
     /**
      * that use by droidlogic-res.apk only, because need have one callback only
      *
@@ -748,6 +746,16 @@ public class SystemControlManager {
                 mProxy.setCallback(listener);
             } catch (RemoteException e) {
                 Log.e(TAG, "setCallback:" + e);
+            }
+        }
+    }
+
+    public void setAppInfo(String pkg, String cls, ArrayList<String> proc) {
+        synchronized (mLock) {
+            try {
+                mProxy.setAppInfo(pkg, cls, proc);
+            } catch (RemoteException e) {
+                Log.e(TAG, "setAppInfo:" + e);
             }
         }
     }

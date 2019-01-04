@@ -27,8 +27,8 @@ import android.util.Log;
 public class DolbyVisionSettingManager {
     private static final String TAG                 = "DolbyVisionSettingManager";
 
-    private static final String PROP_DOLBY_VISION_ENABLE  = "persist.sys.dolbyvision.enable";
-    private static final String PROP_DOLBY_VISION_TYPE = "persist.sys.dolbyvision.type";
+    private static final String PROP_DOLBY_VISION_ENABLE  = "persist.vendor.sys.dolbyvision.enable";
+    private static final String PROP_DOLBY_VISION_TYPE = "persist.vendor.sys.dolbyvision.type";
 
     public static final int DOVISION_DISABLE        = 0;
     public static final int DOVISION_ENABLE         = 1;
@@ -38,7 +38,7 @@ public class DolbyVisionSettingManager {
 
     public DolbyVisionSettingManager(Context context){
         mContext = context;
-        mSystenControl = new SystemControlManager(context);
+        mSystenControl = SystemControlManager.getInstance();
     }
 
     public void initSetDolbyVision() {

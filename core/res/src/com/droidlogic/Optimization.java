@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2014 Amlogic, Inc. All rights reserved.
+ *
+ * This source code is subject to the terms and conditions defined in the
+ * file 'LICENSE' which is part of this source code package.
+ *
+ * Description:
+ *     AMLOGIC Optimization
+ */
+
 package com.droidlogic;
 
 import android.app.ActivityManager;
@@ -11,27 +21,34 @@ import android.os.IBinder;
 import android.os.SystemProperties;
 import android.util.Log;
 
+import java.util.ArrayList;
 import java.lang.Runnable;
 import java.lang.Thread;
 import java.util.List;
+
+import com.droidlogic.app.SystemControlManager;
 
 public class Optimization extends Service {
     private static String TAG = "Optimization";
     private Context mContext;
 
-    static {
-        System.loadLibrary("optimization");
-    }
+    //static {
+    //    System.loadLibrary("optimization");
+    //}
+
+    SystemControlManager mSCM;
 
     @Override
     public void onCreate() {
         super.onCreate();
         mContext = this;
+
+        mSCM = SystemControlManager.getInstance();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (SystemProperties.getBoolean("ro.app.optimization", true)) {
+        if (SystemProperties.getBoolean("ro.vendor.app.optimization", true)) {
             new Thread(runnable).start();
         }
         else {
@@ -53,14 +70,15 @@ public class Optimization extends Service {
 
     private Runnable runnable = new Runnable() {
         public void run() {
-            int retProc = -1;
-            int retPkg = -1;
-            boolean isInProcOpt = false;
-            boolean isInPkgOpt = false;
+            //int retProc = -1;
+            //int retPkg = -1;
+            //boolean isInProcOpt = false;
+            //boolean isInPkgOpt = false;
             ActivityManager am = (ActivityManager)mContext.getSystemService(Context.ACTIVITY_SERVICE);
 
             while (true) {
                 try {
+                    /*
                     if (!isInProcOpt) {
                         List< ActivityManager.RunningTaskInfo > task = am.getRunningTasks (1);
                         if (!task.isEmpty()) {
@@ -94,7 +112,24 @@ public class Optimization extends Service {
                         else if (retProc != -4) {
                             isInProcOpt = false;
                         }
+                    }*/
+
+                    String pkg = "";
+                    String cls = "";
+                    ArrayList<String> proc = new ArrayList<String>();
+                    List< ActivityManager.RunningAppProcessInfo> apInfo = am.getRunningAppProcesses();
+                    for (int i = 0; i < apInfo.size(); i++) {
+                        proc.add(apInfo.get(i).processName);
                     }
+
+                    List< ActivityManager.RunningTaskInfo > task = am.getRunningTasks (1);
+                    if (!task.isEmpty()) {
+                        ComponentName cn = task.get (0).topActivity;
+                        pkg = cn.getPackageName();
+                        cls = cn.getClassName();
+                    }
+
+                    mSCM.setAppInfo(pkg, cls, proc);
 
                     Thread.sleep(50);
                 } catch (Exception e) {
@@ -104,6 +139,6 @@ public class Optimization extends Service {
         }
     };
 
-    private native int nativeOptimization(String pkg, String cls);
-    private native int nativeOptimization(String[] proc);
+    //private native int nativeOptimization(String pkg, String cls);
+    //private native int nativeOptimization(String[] proc);
 }

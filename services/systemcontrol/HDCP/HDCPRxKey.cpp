@@ -41,6 +41,8 @@
 #endif
 
 #define HDCP_RX22_KEY_NAME                  "hdcp22_rx_fw"
+#define HDCP_RPRX22_KEY_NAME                "hdcp22_rprx_fw"
+#define HDCP_RPRP22_KEY_NAME                "hdcp22_rprp_fw"
 #define HDCP_RX14_KEY_NAME                  "hdcp14_rx"
 
 #define HDCP_RX_KEY_ATTACH_DEV_PATH         "/sys/class/unifykeys/attach"
@@ -48,6 +50,8 @@
 #define HDCP_RX_KEY_DATA_EXIST              "/sys/class/unifykeys/exist"
 #define HDCP_RX_KEY_READ_DEV_PATH           "/sys/class/unifykeys/read"
 #define HDCP_RX_KEY_WRITE_DEV_PATH          "/sys/class/unifykeys/write"
+#define HDCP_RX_KEY_SECURE_DEV_PATH         "/sys/class/unifykeys/secure"
+
 
 #define HDCP_RX22_TOOL_KEYS                 "hdcprxkeys"
 #define HDCP_RX22_TOOL_ESM_SWAP             "esm_swap"
@@ -64,6 +68,7 @@
 #define HDCP_RX22_CFG_AIC_SRC               "/vendor/etc/firmware/hdcp_rx22/firmware.aic"
 #define HDCP_RX22_CFG_AIC_DES               "/mnt/vendor/param/firmware.aic"
 #define HDCP_RX22_KEY_PATH                  "/mnt/vendor/param/hdcp2_rx.bin"
+#define HDCP_RP22_CFG_AIC_SRC               "/vendor/etc/firmware/hdcp_rp22/firmware.aic"
 
 #define HDCP_RX22_OUT_KEY_IMG               "/mnt/vendor/param/dcp_rx.out"
 #define HDCP_RX22_OUT_KEY_LE                "/mnt/vendor/param/hdcp_keys.le"
@@ -72,10 +77,14 @@
 #define HDCP_RX22_SRC_FW_PATH               "/vendor/etc/firmware/hdcp_rx22/firmware.le"
 #define HDCP_RX22_DES_FW_PATH               "/mnt/vendor/param/firmware.le"
 #define HDCP_RX22_KEY_CRC_PATH              "/mnt/vendor/param/hdcprx22.crc"
+#define HDCP_RP22_KEY_CRC_PATH              "/mnt/vendor/param/hdcprp22.crc"
 #define HDCP_RX22_KEY_CRC_LEN               4
 
+#define HDCP_RP22_DEST_FW_PATH              "/vendor/etc/firmware/hdcp_rp22/firmware.le"
 #define HDCP_RX_DEBUG_PATH                  "/sys/class/hdmirx/hdmirx0/debug"
 #define HDMI_RX_HPD_OK_FLAG                 "/sys/module/tvin_hdmirx/parameters/hdcp22_firmware_ok_flag"
+#define HDCP_RPRX22_SRC_FW_PATH             "/vendor/etc/firmware/hdcp_rp22/firmware_rprx.le"
+#define HDCP_RPRX22_DES_FW_PATH             "/mnt/vendor/param/firmware_rprx.le"
 #define HDCP_RX14_KEY_MODE_DEV              "/dev/hdmirx0"
 
 #define HDCP_RX22_STORAGE_KEY_SIZE          (10U<<10)//10K
@@ -83,6 +92,7 @@
 #define HDCP_RX14_KEY_TOTAL_SIZE            (368)
 #define HDCP_RX14_KEY_HEAD_SIZE             (40)
 #define HDCP_RX14_KEY_CONTENT_SIZE          (HDCP_RX14_KEY_TOTAL_SIZE - HDCP_RX14_KEY_HEAD_SIZE)
+#define HDCP_RXRP22_2080BYTE_SIZE             2080
 
 static unsigned char HDCP_RX14_KEY_DEF_HEADER[HDCP_RX14_KEY_HEAD_SIZE] = {
     //40 bytes
@@ -194,6 +204,15 @@ static int saveFile(const char *path, const char *buf, int bufLen) {
     return len;
 }
 
+static size_t getFileSize(const char *fpath) {
+    struct stat buf;
+    if (stat(fpath, &buf) < 0) {
+        SYS_LOGE("Can't stat %s : %s\n", fpath, strerror(errno));
+        return 0;
+    }
+    return buf.st_size;
+}
+
 HDCPRxKey::HDCPRxKey(int keyType) :
     mKeyType(keyType) {
 
@@ -241,16 +260,36 @@ int HDCPRxKey::getHdcpRX14key(char *value, int size) {
         return -1;
     }
 
-    SYS_LOGE("getHdcp14key success in len %d\n", size);
+    SYS_LOGD("getHdcp14key success in len %d\n", size);
 
     return len;
 }
 
 int HDCPRxKey::setHdcpRX14key(const char *value, const int size) {
     char keyContentBuf[HDCP_RX14_KEY_CONTENT_SIZE] = { 0 };
-    char keyTotalBuf[HDCP_RX14_KEY_TOTAL_SIZE];
-    char sha1_buf1[20];
-    char sha1_buf2[20];
+    char keyTotalBuf[HDCP_RX14_KEY_TOTAL_SIZE] = {0};
+    char sha1_buf1[20] = {0};
+    char sha1_buf2[20] = {0};
+    char secValue[10] = {0};
+
+    if (writeSys(HDCP_RX_KEY_ATTACH_DEV_PATH, "1")) {
+        SYS_LOGE("setHDCP14Key, attach failed!\n");
+        return -1;
+    }
+
+    if (writeSys(HDCP_RX_KEY_NAME_DEV_PATH, HDCP_RX14_KEY_NAME)) {
+        SYS_LOGE("setHDCP14Key, name failed!\n");
+        return -1;
+    }
+
+    readSys(HDCP_RX_KEY_SECURE_DEV_PATH, (char*)secValue, 10);
+
+    if (!strncmp(secValue, "true", 4)) {
+        setHdcpRX14keyMode(HDCP14_KEY_MODE_SECURE);
+    }
+    else {
+        setHdcpRX14keyMode(HDCP14_KEY_MODE_NORMAL);
+    }
 
     if ( size == 348) {
         SYS_LOGE("size: %d bytes\n", size);
@@ -265,16 +304,6 @@ int HDCPRxKey::setHdcpRX14key(const char *value, const int size) {
     }
     else {
         SYS_LOGE("error size. need %d or 348 bytes\n", HDCP_RX14_KEY_CONTENT_SIZE);
-        return -1;
-    }
-
-    if (writeSys(HDCP_RX_KEY_ATTACH_DEV_PATH, "1")) {
-        SYS_LOGE("setHDCP14Key, attach failed!\n");
-        return -1;
-    }
-
-    if (writeSys(HDCP_RX_KEY_NAME_DEV_PATH, HDCP_RX14_KEY_NAME)) {
-        SYS_LOGE("setHDCP14Key, name failed!\n");
         return -1;
     }
 
@@ -293,7 +322,8 @@ int HDCPRxKey::setHdcpRX14key(const char *value, const int size) {
 
 bool HDCPRxKey::setHDCP14Key() {
     char keyContentBuf[HDCP_RX14_KEY_CONTENT_SIZE] = { 0 };
-    char keyTotalBuf[HDCP_RX14_KEY_TOTAL_SIZE];
+    char keyTotalBuf[HDCP_RX14_KEY_TOTAL_SIZE]     = {0};
+    char secValue[10] = {0};
 
     if (writeSys(HDCP_RX_KEY_ATTACH_DEV_PATH, "1")) {
         SYS_LOGE("setHDCP14Key, attach failed!\n");
@@ -305,17 +335,48 @@ bool HDCPRxKey::setHDCP14Key() {
         return false;
     }
 
-    int len = readSys(HDCP_RX_KEY_READ_DEV_PATH, keyContentBuf, HDCP_RX14_KEY_CONTENT_SIZE);
-    if (HDCP_RX14_KEY_CONTENT_SIZE != len) {
-        SYS_LOGE("setHDCP14Key, Fail in read (%s) in len %d\n", HDCP_RX14_KEY_NAME, HDCP_RX14_KEY_CONTENT_SIZE);
-        return false;
+    readSys(HDCP_RX_KEY_SECURE_DEV_PATH, (char*)secValue, 10);
+    SYS_LOGD("Get secure value = %s", secValue);
+
+    if (!strncmp(secValue, "true", 4)) {
+        setHdcpRX14keyMode(HDCP14_KEY_MODE_SECURE);
+    }
+    else {
+        int len = readSys(HDCP_RX_KEY_READ_DEV_PATH, keyContentBuf, HDCP_RX14_KEY_CONTENT_SIZE);
+        if (HDCP_RX14_KEY_CONTENT_SIZE != len) {
+            SYS_LOGE("setHDCP14Key, Fail in read (%s) in len %d\n", HDCP_RX14_KEY_NAME, HDCP_RX14_KEY_CONTENT_SIZE);
+            return false;
+        }
+
+        memcpy(keyTotalBuf, HDCP_RX14_KEY_DEF_HEADER, HDCP_RX14_KEY_HEAD_SIZE);
+        memcpy(keyTotalBuf + HDCP_RX14_KEY_HEAD_SIZE, keyContentBuf, HDCP_RX14_KEY_CONTENT_SIZE);
+        writeBufSys("/sys/class/hdmirx/hdmirx0/edid", keyTotalBuf, HDCP_RX14_KEY_TOTAL_SIZE);
+        setHdcpRX14keyMode(HDCP14_KEY_MODE_NORMAL);
+    }
+    return true;
+}
+
+int HDCPRxKey::setHdcpRX14keyMode(hdcp14_key_mode_e mode)
+{
+    int ret = -1;
+    int fd, size;
+    long long temp = mode;
+
+    SYS_LOGD("%s: HdcpRX14keyMode = %d\n", __FUNCTION__, mode);
+    if ((fd = open(HDCP_RX14_KEY_MODE_DEV, O_RDWR)) < 0) {
+        SYS_LOGE("%s:open %s fail.", __FUNCTION__, HDCP_RX14_KEY_MODE_DEV);
+        return ret;
     }
 
-    memcpy(keyTotalBuf, HDCP_RX14_KEY_DEF_HEADER, HDCP_RX14_KEY_HEAD_SIZE);
-    memcpy(keyTotalBuf + HDCP_RX14_KEY_HEAD_SIZE, keyContentBuf, HDCP_RX14_KEY_CONTENT_SIZE);
-    writeBufSys("/sys/class/hdmirx/hdmirx0/edid", keyTotalBuf, HDCP_RX14_KEY_TOTAL_SIZE);
+    ret = ioctl(fd, HDMI_IOC_HDCP14_KEY_MODE, &temp);
+    if (ret != 0) {
+        SYS_LOGE("ioctl error: %s\n", strerror(errno));
+        close(fd);
+        return ret;
+    }
 
-    return true;
+    close(fd);
+    return ret;
 }
 
 int HDCPRxKey::getHdcpRX22key(char *value, int size)
@@ -338,7 +399,7 @@ int HDCPRxKey::getHdcpRX22key(char *value, int size)
         goto _exit;
     }
 
-    SYS_LOGE("read success, want %d bytes, but read len = %d\n", size, keyLen);
+    SYS_LOGD("read success, want %d bytes, but read len = %d\n", size, keyLen);
 _exit:
     return keyLen;
 }
@@ -353,61 +414,94 @@ int HDCPRxKey::setHdcpRX22key(const char *value, const int size)
     long keyCrcValue = 0;
     char lastCrcData[HDCP_RX22_KEY_CRC_LEN] = {0};
     long lastCrcValue = 0;
+    char rpvalue[8] = {0};
+    char pSourcePath[60] = {0};
+    char pDestPath[60]   = {0};
+    char cmd[128] = {0};
+    int decryptRetRx = -1;
+    int decryptRetRp = -1;
 
-    writeSys(HDCP_RX_KEY_ATTACH_DEV_PATH, "1");
-    writeSys(HDCP_RX_KEY_NAME_DEV_PATH, HDCP_RX22_KEY_NAME);
+    getRepeaterValue(rpvalue);
+    getFirmwareSourcePath(rpvalue, pSourcePath);
+    getFirmwareDestPath(rpvalue, pDestPath);
 
-    keyLen = writeBufSys(HDCP_RX_KEY_WRITE_DEV_PATH, value, size);
-    if (keyLen != size) {
-        SYS_LOGE("write key length fail, we need to write %d bytes, but just write len = %d\n", size, keyLen);
-        goto _exit;
-    }
+    if (!strcmp(rpvalue, "1")) {
+        decryptRetRp = PC_TOOL; //use pc tool to combine firmware
+        if (access(HDCP_RX22_SRC_FW_PATH, F_OK) || access(HDCP_RPRX22_SRC_FW_PATH, F_OK)) {
+            SYS_LOGE("don't exist path:%s\n", HDCP_RX22_SRC_FW_PATH);
+            SYS_LOGE("don't exist path:%s\n", HDCP_RPRX22_SRC_FW_PATH);
+            setHdcpRX22SupportStatus();
+            goto _exit;
+        } else {
+            combineFirmwarewithPCTool(HDCP_RPRX22_KEY_NAME, HDCP_RX22_KEY_CRC_PATH, HDCP_RX22_SRC_FW_PATH, HDCP_RX22_DES_FW_PATH);
+            combineFirmwarewithPCTool(HDCP_RPRP22_KEY_NAME, HDCP_RP22_KEY_CRC_PATH, HDCP_RPRX22_SRC_FW_PATH, HDCP_RPRX22_DES_FW_PATH);
+        }
+    }else {
+        writeSys(HDCP_RX_KEY_ATTACH_DEV_PATH, "1");
+        writeSys(HDCP_RX_KEY_NAME_DEV_PATH, HDCP_RX22_KEY_NAME);
 
-    usleep(100*1000);
+        keyLen = writeBufSys(HDCP_RX_KEY_WRITE_DEV_PATH, value, size);
+        if (keyLen != size) {
+            SYS_LOGE("write key length fail, we need to write %d bytes, but just write len = %d\n", size, keyLen);
+            goto _exit;
+        }
 
-    readSys(HDCP_RX_KEY_DATA_EXIST, (char*)existKey, 10);
-    if (0 == strcmp(existKey, "0")) {
-        SYS_LOGE("do not write key to the storage");
-        goto _exit;
-    }
-    SYS_LOGI("hdcp_rx22 write success\n");
+        usleep(100*1000);
 
+        readSys(HDCP_RX_KEY_DATA_EXIST, (char*)existKey, 10);
+        if (0 == strcmp(existKey, "0")) {
+            SYS_LOGE("do not write key to the storage");
+            goto _exit;
+        }
+        SYS_LOGI("hdcp_rx22 write success\n");
 
-    memcpy(keyCrcData, value, HDCP_RX22_KEY_CRC_LEN);
-    keyCrcValue = ((keyCrcData[3]<<24)|(keyCrcData[2]<<16)|(keyCrcData[1]<<8)|(keyCrcData[0]&0xff));
+        memcpy(keyCrcData, value, HDCP_RX22_KEY_CRC_LEN);
+        keyCrcValue = ((keyCrcData[3]<<24)|(keyCrcData[2]<<16)|(keyCrcData[1]<<8)|(keyCrcData[0]&0xff));
 
-    readSys(HDCP_RX22_KEY_CRC_PATH, lastCrcData, HDCP_RX22_KEY_CRC_LEN);
-    lastCrcValue = ((lastCrcData[3]<<24)|(lastCrcData[2]<<16)|(lastCrcData[1]<<8)|(lastCrcData[0]&0xff));
-
-    if (access(HDCP_RX22_DES_FW_PATH, F_OK) || keyCrcValue != lastCrcValue) {
-        SYS_LOGI("HDCP RX 2.2 firmware don't exist or crc different, need create it, last crc value:0x%x, cur crc value:0x%x\n",
-            (unsigned int)lastCrcValue, (unsigned int)keyCrcValue);
+        readSys(HDCP_RX22_KEY_CRC_PATH, lastCrcData, HDCP_RX22_KEY_CRC_LEN);
+        lastCrcValue = ((lastCrcData[3]<<24)|(lastCrcData[2]<<16)|(lastCrcData[1]<<8)|(lastCrcData[0]&0xff));
+        if (access(pDestPath, F_OK) || keyCrcValue != lastCrcValue) {
+            SYS_LOGI("HDCP RX 2.2 firmware don't exist or crc different, need create it, last crc value:0x%x, cur crc value:0x%x\n",
+                (unsigned int)lastCrcValue, (unsigned int)keyCrcValue);
 
         //1. unpack random number and key to the files
-        bool decryptRet = hdcpKeyUnpack(value, keyLen,
+        decryptRetRx = hdcpKeyUnpack(value, keyLen,
             HDCP_RX22_CFG_AIC_SRC, HDCP_RX22_CFG_AIC_DES, HDCP_RX22_KEY_PATH);
-        if (!decryptRet) {
+        if (decryptRetRx == -1) {
             SYS_LOGE("unpack hdcp key fail\n");
+            setHdcpRX22SupportStatus();
             goto _exit;
         }
 
         //2. then generate hdcp firmware
-        if (genKeyImg() && esmSwap() && aicTool()) {
-            //3. generate firmware success, save the key's crc value
-            saveFile(HDCP_RX22_KEY_CRC_PATH, keyCrcData, HDCP_RX22_KEY_CRC_LEN);
-            SYS_LOGI("HDCP RX 2.2 firmware generate success, save crc value:0x%x -> %s\n", (unsigned int)keyCrcValue, HDCP_RX22_KEY_CRC_PATH);
+        if (decryptRetRx == ARM_TOOL) {
+            if (genKeyImg(rpvalue) && esmSwap(rpvalue) && aicTool(rpvalue)) {
+                SYS_LOGI("HDCP RX 2.2 firmware generate success, save crc value:0x%x -> %s\n", (unsigned int)keyCrcValue, HDCP_RX22_KEY_CRC_PATH);
 
-            combineFirmware();
+                combineFirmwarewithArmTool(HDCP_RX22_SRC_FW_PATH, HDCP_RX22_DES_FW_PATH, HDCP_RX22_OUT_2080_BYTE); //combine firmware RX22
 
-            //remove temporary files
-            remove(HDCP_RX22_KEY_PATH);
-            remove(HDCP_RX22_CFG_AIC_DES);
-            remove(HDCP_RX22_OUT_KEY_IMG);
-            remove(HDCP_RX22_OUT_KEY_LE);
-            remove(HDCP_RX22_OUT_2080_BYTE);
-
-            ret = 0;
+                //remove temporary files
+                remove(HDCP_RX22_KEY_PATH);
+                remove(HDCP_RX22_CFG_AIC_DES);
+                remove(HDCP_RX22_OUT_KEY_IMG);
+                remove(HDCP_RX22_OUT_KEY_LE);
+                remove(HDCP_RX22_OUT_2080_BYTE);
+                ret = 0;
+                    //3. generate firmware success, save the key's crc value
+                saveFile(HDCP_RX22_KEY_CRC_PATH, keyCrcData, HDCP_RX22_KEY_CRC_LEN);
+            }
+        } else { // decryptRetRx = PC_TooL
+            if (access(HDCP_RX22_SRC_FW_PATH, F_OK)) {
+                SYS_LOGE("don't exist path:%s\n", HDCP_RX22_SRC_FW_PATH);
+                setHdcpRX22SupportStatus();
+                goto _exit;
+            } else {
+                combineFirmwarewithPCTool(HDCP_RX22_KEY_NAME, HDCP_RX22_KEY_CRC_PATH, HDCP_RX22_SRC_FW_PATH, HDCP_RX22_DES_FW_PATH);
+                ret = 0;
+            }
         }
+        }
+        SYS_LOGD("use tool 0 stand for pc tool, 1 stand for arm tool decryptRetRx = %d, decryptRetRp = %d\n", decryptRetRx, decryptRetRp);
     }
     writeBufSys(HDCP_RX_DEBUG_PATH, "load22key", 10);
 _exit:
@@ -422,90 +516,113 @@ bool HDCPRxKey::setHDCP22Key() {
     long keyCrcValue = 0;
     char lastCrcData[HDCP_RX22_KEY_CRC_LEN] = {0};
     long lastCrcValue = 0;
-
+    char rpvalue[8] = {0};
+    char pSourcePath[60] = {0};
+    char pDestPath[60]   = {0};
     char existKey[10] = {0};
+    char cmd[128] = {0};
     int countNum = 0;
+    int decryptRetRx = -1;
+    int decryptRetRp = -1;
     struct stat st;
-
+    getRepeaterValue(rpvalue);
+    getFirmwareSourcePath(rpvalue, pSourcePath);
+    getFirmwareDestPath(rpvalue, pDestPath);
     char *pKeyBuf = new char[HDCP_RX22_STORAGE_KEY_SIZE];
     if (!pKeyBuf) {
         SYS_LOGE("Exception: fail to alloc buffer size:%d\n", HDCP_RX22_STORAGE_KEY_SIZE);
         goto _exit;
     }
+
 _reGenetate:
-    memset(pKeyBuf, 0, HDCP_RX22_STORAGE_KEY_SIZE);
-
-    writeSys(HDCP_RX_KEY_ATTACH_DEV_PATH, "1");
-    writeSys(HDCP_RX_KEY_NAME_DEV_PATH, HDCP_RX22_KEY_NAME);
-
-    readSys(HDCP_RX_KEY_DATA_EXIST, (char*)existKey, 10);
-    if (!strcmp(existKey, "0")) {
-        SYS_LOGE("do not write key to the secure storage");
-        goto _exit;
-    }
-
-#if 1
-    //the first 4 bytes are the crc values
-    keyLen = readSys(HDCP_RX_KEY_READ_DEV_PATH, pKeyBuf, HDCP_RX22_STORAGE_KEY_SIZE);
-    if (keyLen < HDCP_RX22_KEY_CRC_LEN) {
-        SYS_LOGE("read key length fail, at least %d bytes, but read len = %d\n", HDCP_RX22_KEY_CRC_LEN, keyLen);
-        goto _exit;
-    }
-#else
-    keyLen = readSys(HDCP_RX_KEY_ENCRYPT_TEST, pKeyBuf, HDCP_RX22_STORAGE_KEY_SIZE);
-    if (keyLen < HDCP_RX22_KEY_CRC_LEN) {
-        SYS_LOGE("read key length fail, at least %d bytes, but read len = %d\n", HDCP_RX22_KEY_CRC_LEN, keyLen);
-        goto _exit;
-    }
-#endif
-
-    //for (int i = 0; i < keyLen; i++)
-    //    SYS_LOGI("read key [%d] = 0x%x\n", i, pKeyBuf[i]);
-
-    memcpy(keyCrcData, pKeyBuf, HDCP_RX22_KEY_CRC_LEN);
-    keyCrcValue = ((keyCrcData[3]<<24)|(keyCrcData[2]<<16)|(keyCrcData[1]<<8)|(keyCrcData[0]&0xff));
-
-    readSys(HDCP_RX22_KEY_CRC_PATH, lastCrcData, HDCP_RX22_KEY_CRC_LEN);
-    lastCrcValue = ((lastCrcData[3]<<24)|(lastCrcData[2]<<16)|(lastCrcData[1]<<8)|(lastCrcData[0]&0xff));
-
-    if (access(HDCP_RX22_DES_FW_PATH, F_OK) || keyCrcValue != lastCrcValue) {
-        SYS_LOGI("HDCP RX 2.2 firmware don't exist or crc different, need create it, last crc value:0x%x, cur crc value:0x%x\n",
-            (unsigned int)lastCrcValue, (unsigned int)keyCrcValue);
-
+   if (!strcmp(rpvalue, "1")) {
+        decryptRetRp = PC_TOOL; //use pc tool to combine firmware
+        if (access(HDCP_RX22_SRC_FW_PATH, F_OK) || access(HDCP_RPRX22_SRC_FW_PATH, F_OK)) {
+            SYS_LOGE("don't exist path:%s\n", HDCP_RX22_SRC_FW_PATH);
+            SYS_LOGE("don't exist path:%s\n", HDCP_RPRX22_SRC_FW_PATH);
+            setHdcpRX22SupportStatus();
+            goto _exit;
+        } else {
+            combineFirmwarewithPCTool(HDCP_RPRX22_KEY_NAME, HDCP_RX22_KEY_CRC_PATH, HDCP_RX22_SRC_FW_PATH, HDCP_RX22_DES_FW_PATH);
+            combineFirmwarewithPCTool(HDCP_RPRP22_KEY_NAME, HDCP_RP22_KEY_CRC_PATH, HDCP_RPRX22_SRC_FW_PATH, HDCP_RPRX22_DES_FW_PATH);
+        }
+   } else {
+        memset(pKeyBuf, 0, HDCP_RX22_STORAGE_KEY_SIZE);
         //1. unpack random number and key to the files
-        bool decryptRet = hdcpKeyUnpack(pKeyBuf, keyLen,
+        writeSys(HDCP_RX_KEY_ATTACH_DEV_PATH, "1");
+        writeSys(HDCP_RX_KEY_NAME_DEV_PATH, HDCP_RX22_KEY_NAME);
+
+        readSys(HDCP_RX_KEY_DATA_EXIST, (char*)existKey, 10);
+        if (!strcmp(existKey, "0")) {
+            SYS_LOGE("do not write key to the secure storage");
+            goto _exit;
+        }
+        SYS_LOGI("hdcp_rx22 write success\n");
+            //the first 4 bytes are the crc values
+        keyLen = readSys(HDCP_RX_KEY_READ_DEV_PATH, pKeyBuf, HDCP_RX22_STORAGE_KEY_SIZE);
+        if (keyLen < HDCP_RX22_KEY_CRC_LEN) {
+            SYS_LOGE("read key length fail, at least %d bytes, but read len = %d\n", HDCP_RX22_KEY_CRC_LEN, keyLen);
+            goto _exit;
+        }
+
+        //for (int i = 0; i < keyLen; i++)
+        //    SYS_LOGI("read key [%d] = 0x%x\n", i, pKeyBuf[i]);
+        memcpy(keyCrcData, pKeyBuf, HDCP_RX22_KEY_CRC_LEN);
+        keyCrcValue = ((keyCrcData[3]<<24)|(keyCrcData[2]<<16)|(keyCrcData[1]<<8)|(keyCrcData[0]&0xff));
+
+        readSys(HDCP_RX22_KEY_CRC_PATH, lastCrcData, HDCP_RX22_KEY_CRC_LEN);
+        lastCrcValue = ((lastCrcData[3]<<24)|(lastCrcData[2]<<16)|(lastCrcData[1]<<8)|(lastCrcData[0]&0xff));
+        if (access(pDestPath, F_OK) || keyCrcValue != lastCrcValue) {
+            SYS_LOGI("HDCP RX 2.2 firmware don't exist or crc different, need create it, last crc value:0x%x, cur crc value:0x%x\n",
+                (unsigned int)lastCrcValue, (unsigned int)keyCrcValue);
+
+        decryptRetRx = hdcpKeyUnpack(pKeyBuf, keyLen,
             HDCP_RX22_CFG_AIC_SRC, HDCP_RX22_CFG_AIC_DES, HDCP_RX22_KEY_PATH);
-        if (!decryptRet) {
+        if (decryptRetRx == -1) {
             SYS_LOGE("unpack hdcp key fail\n");
             goto _exit;
         }
 
-        //2. then generate hdcp firmware
-        if (genKeyImg() && esmSwap() && aicTool()) {
-            //3. generate firmware success, save the key's crc value
-            saveFile(HDCP_RX22_KEY_CRC_PATH, keyCrcData, HDCP_RX22_KEY_CRC_LEN);
-            SYS_LOGI("HDCP RX 2.2 firmware generate success, save crc value:0x%x -> %s\n", (unsigned int)keyCrcValue, HDCP_RX22_KEY_CRC_PATH);
+        if (decryptRetRx == ARM_TOOL) {
+            //2. then generate hdcp firmware
+            if (genKeyImg(rpvalue) && esmSwap(rpvalue) && aicTool(rpvalue)) {
+                //3. generate firmware success, save the key's crc value
+                SYS_LOGI("HDCP RX 2.2 firmware generate success, save crc value:0x%x -> %s\n", (unsigned int)keyCrcValue, HDCP_RX22_KEY_CRC_PATH);
 
-            combineFirmware();
+                combineFirmwarewithArmTool(HDCP_RX22_SRC_FW_PATH, HDCP_RX22_DES_FW_PATH, HDCP_RX22_OUT_2080_BYTE); //combine firmware RX22
 
-            //remove temporary files
-            remove(HDCP_RX22_KEY_PATH);
-            remove(HDCP_RX22_CFG_AIC_DES);
-            remove(HDCP_RX22_OUT_KEY_IMG);
-            remove(HDCP_RX22_OUT_KEY_LE);
-            remove(HDCP_RX22_OUT_2080_BYTE);
-
-            ret = true;
-        }
+                //remove temporary files
+                remove(HDCP_RX22_KEY_PATH);
+                remove(HDCP_RX22_CFG_AIC_DES);
+                remove(HDCP_RX22_OUT_KEY_IMG);
+                remove(HDCP_RX22_OUT_KEY_LE);
+                remove(HDCP_RX22_OUT_2080_BYTE);
+                //3. generate firmware success, save the key's crc value
+                saveFile(HDCP_RX22_KEY_CRC_PATH, keyCrcData, HDCP_RX22_KEY_CRC_LEN);
+            }
+        } else { // decryptRetRx = PC_TOOL
+            if (access(HDCP_RX22_SRC_FW_PATH, F_OK)) {
+                SYS_LOGE("don't exist path:%s\n", HDCP_RX22_SRC_FW_PATH);
+                setHdcpRX22SupportStatus();
+                goto _exit;
+            } else {
+                combineFirmwarewithPCTool(HDCP_RX22_KEY_NAME, HDCP_RX22_KEY_CRC_PATH, HDCP_RX22_SRC_FW_PATH, HDCP_RX22_DES_FW_PATH);
+            }
+       }
+        SYS_LOGD("use tool 0 stand for pc tool, 1 stand for arm tool decryptRetRx = %d, decryptRetRp = %d\n", decryptRetRx, decryptRetRp);
+       }
     }
 
-    if (stat(HDCP_RX22_DES_FW_PATH, &st) != 0) {
+    if (stat(pDestPath, &st) != 0) {
         SYS_LOGE("Error stating file that we just created %s, error:%s", HDCP_RX22_DES_FW_PATH, strerror(errno));
         goto _exit;
+    } else {
+        //stand for set hdcp22 key and combinefirmware success.
+        ret = true;
     }
 
     if (st.st_size < 100) {
-        remove(HDCP_RX22_DES_FW_PATH);
+        remove(pDestPath);
 
         SYS_LOGE("generate firmware.le error, for the %d time", countNum);
         if (countNum < 2) {
@@ -519,14 +636,23 @@ _reGenetate:
     }
 
     usleep(100*1000);
-    sysWrite.setProperty("ctl.start", "hdcp_rx22");
-    SYS_LOGI("firmware.le generated success, start hdcp rx22\n");
+    #if 0
+    if (!strcmp(rpvalue, "1")) {
+        sysWrite.setProperty("ctl.start", "hdcp_rp22");
+        SYS_LOGI("firmware_rprx.le generated success, start hdcp rp22\n");
+        goto _exit;
+    } else {
+        sysWrite.setProperty("ctl.start", "hdcp_rx22");
+        SYS_LOGI("firmware.le generated success, start hdcp rx22\n");
+        goto _exit;
+    }
+    #endif
 _exit:
     if (pKeyBuf) delete[] pKeyBuf;
     return ret;
 }
 
-bool HDCPRxKey::genKeyImg() {
+bool HDCPRxKey::genKeyImg(const char* rpvalue) {
     char cmd[512] = {0};
     if (access(HDCP_RX22_KEYS_PATH, F_OK)) {
         SYS_LOGE("don't exist path:%s\n", HDCP_RX22_KEYS_PATH);
@@ -551,9 +677,10 @@ bool HDCPRxKey::genKeyImg() {
 
     SYS_LOGI("generate %s success \n", HDCP_RX22_OUT_KEY_IMG);
     return true;
+
 }
 
-bool HDCPRxKey::esmSwap() {
+bool HDCPRxKey::esmSwap(const char* rpvalue) {
     char cmd[512] = {0};
     if (access(HDCP_RX22_ESM_SWAP_PATH, F_OK)) {
         SYS_LOGE("don't exist path:%s\n", HDCP_RX22_ESM_SWAP_PATH);
@@ -580,7 +707,7 @@ bool HDCPRxKey::esmSwap() {
     return true;
 }
 
-bool HDCPRxKey::aicTool() {
+bool HDCPRxKey::aicTool(const char* rpvalue) {
     char cmd[512] = {0};
     if (access(HDCP_RX22_AIC_TOOL_PATH, F_OK)) {
         SYS_LOGE("don't exist path:%s\n", HDCP_RX22_AIC_TOOL_PATH);
@@ -608,7 +735,7 @@ bool HDCPRxKey::aicTool() {
 }
 
 //insert 2080 byte into origin firware, combine a new firware
-bool HDCPRxKey::combineFirmware() {
+bool HDCPRxKey::combineFirmwarewithArmTool(const char* pSourcePath, const char* pDestPath, const char* pTempPath) {
     bool ret = false;
     int srcFd = -1;
     int desFd = -1;
@@ -618,8 +745,14 @@ bool HDCPRxKey::combineFirmware() {
     int srcSize = 0;
     int insertSize = 0;
     int writeSize =0;
+
+    if (!pSourcePath || !pDestPath) {
+        SYS_LOGE("firmware source path and dest path isn't ready\n");
+        return false;
+    }
     //read origin firmware.le to buffer
-    srcFd = open(HDCP_RX22_SRC_FW_PATH, O_RDONLY);
+    srcFd = open(pSourcePath, O_RDONLY);
+
     srcSize = lseek(srcFd, 0, SEEK_END);
     lseek(srcFd, 0, SEEK_SET);
     pSrcData = (char *)malloc(srcSize + 1);
@@ -633,7 +766,7 @@ bool HDCPRxKey::combineFirmware() {
     srcFd = -1;
 
     //read 2080 bytes to buffer
-    insertFd = open(HDCP_RX22_OUT_2080_BYTE, O_RDONLY);
+    insertFd = open(pTempPath, O_RDONLY);
     insertSize = lseek(insertFd, 0, SEEK_END);
     if (2080 != insertSize)
         SYS_LOGE("combine firware, key size is not 2080 bytes\n");
@@ -651,8 +784,8 @@ bool HDCPRxKey::combineFirmware() {
     //insert 2080 bytes to the origin firmware.le
     memcpy(pSrcData + 0x2800, pInsertData, insertSize);
 
-    if ((desFd = open(HDCP_RX22_DES_FW_PATH, O_CREAT | O_RDWR | O_TRUNC, 0644)) < 0) {
-        SYS_LOGE("combine firware, open %s error(%s)", HDCP_RX22_DES_FW_PATH, strerror(errno));
+    if ((desFd = open(pDestPath, O_CREAT | O_RDWR | O_TRUNC, 0644)) < 0) {
+        SYS_LOGE("combine firware, open %s error(%s)", pDestPath, strerror(errno));
         goto exit;
     }
 
@@ -678,6 +811,122 @@ exit:
     return ret;
 }
 
+//insert 2080 byte into origin firware, combine a new firware
+bool HDCPRxKey::combineFirmwarewithPCTool(const char* pKeyName, const char* pCrcName, const char* pSourcePath, const char* pDestPath) {
+    bool ret = false;
+    int srcFd = -1;
+    int desFd = -1;
+    char *pSrcData = NULL;
+    char *pInsertData = NULL;
+    int srcSize = 0;
+    int writeSize =0;
+    char existKey[10] = {0};
+    int keyLen = 0;
+    char keyCrcData[HDCP_RX22_KEY_CRC_LEN] = {0};
+    long keyCrcValue = 0;
+    char lastCrcData[HDCP_RX22_KEY_CRC_LEN] = {0};
+    long lastCrcValue = 0;
+
+    if (!pSourcePath || !pDestPath) {
+        SYS_LOGE("firmware source path and dest path isn't ready\n");
+        return false;
+    }
+
+    char *pKeyBuffer = new char[HDCP_RX22_STORAGE_KEY_SIZE];
+    if (!pKeyBuffer) {
+        SYS_LOGE("Exception: fail to alloc buffer size:%d\n", HDCP_RX22_STORAGE_KEY_SIZE);
+        goto exit;
+    }
+    writeSys(HDCP_RX_KEY_ATTACH_DEV_PATH, "1");
+    writeSys(HDCP_RX_KEY_NAME_DEV_PATH, pKeyName);
+    readSys(HDCP_RX_KEY_DATA_EXIST, (char*)existKey, 10);
+    if (!strcmp(existKey, "0")) {
+        SYS_LOGE("do not write key to the secure storage");
+        goto exit;
+    }
+
+    keyLen = readSys(HDCP_RX_KEY_READ_DEV_PATH, pKeyBuffer, HDCP_RX22_STORAGE_KEY_SIZE);
+    if (keyLen < HDCP_RX22_KEY_CRC_LEN) {
+        SYS_LOGE("read key length fail, at least %d bytes, but read len = %d\n", HDCP_RX22_KEY_CRC_LEN, keyLen);
+        goto exit;
+    }
+
+    //for (int i = 0; i < keyLen; i++)
+        //    SYS_LOGI("read key [%d] = 0x%x\n", i, pKeyBuffer[i]);
+    memcpy(keyCrcData, pKeyBuffer, HDCP_RX22_KEY_CRC_LEN);
+    keyCrcValue = ((keyCrcData[3]<<24)|(keyCrcData[2]<<16)|(keyCrcData[1]<<8)|(keyCrcData[0]&0xff));
+
+    readSys(pCrcName, lastCrcData, HDCP_RX22_KEY_CRC_LEN);
+    lastCrcValue = ((lastCrcData[3]<<24)|(lastCrcData[2]<<16)|(lastCrcData[1]<<8)|(lastCrcData[0]&0xff));
+
+    if (keyCrcValue != lastCrcValue) {
+        SYS_LOGI("crc different, need create it, last crc value:0x%x, cur crc value:0x%x\n",
+            (unsigned int)lastCrcValue, (unsigned int)keyCrcValue);
+        //read origin firmware.le to buffer
+        srcFd = open(pSourcePath, O_RDONLY);
+
+        srcSize = lseek(srcFd, 0, SEEK_END);
+        lseek(srcFd, 0, SEEK_SET);
+        pSrcData = (char *)malloc(srcSize + 1);
+        if (NULL == pSrcData) {
+            SYS_LOGE("combine firware, can not malloc source fw:%d memory\n", srcSize);
+            goto exit;
+        }
+        memset((void*)pSrcData, 0, srcSize + 1);
+        read(srcFd, (void*)pSrcData, srcSize);
+        close(srcFd);
+        srcFd = -1;
+
+        //read 2080 bytes to buffer
+        pInsertData = (char *)malloc(HDCP_RXRP22_2080BYTE_SIZE + 1);
+        if (NULL == pInsertData) {
+            SYS_LOGE("combine firware, can not malloc insert memory\n");
+            goto exit;
+        }
+        memset((void*)pInsertData, 0, HDCP_RXRP22_2080BYTE_SIZE + 1);
+
+        readSys(HDCP_RX_KEY_READ_DEV_PATH, (char*)pInsertData, HDCP_RXRP22_2080BYTE_SIZE);
+        if (!pInsertData) {
+            SYS_LOGE("combine firware, can not get insert data\n");
+            goto exit;
+        }
+
+        //for (int i = 0; i < HDCP_RXRP22_2080BYTE_SIZE; i++)
+            //SYS_LOGI("read key [%d] = 0x%x\n", i, pInsertData[i]);
+
+        //insert 2080 bytes to the origin firmware.le
+        memcpy(pSrcData + 0x2800, pInsertData, HDCP_RXRP22_2080BYTE_SIZE);
+
+        if ((desFd = open(pDestPath, O_CREAT | O_RDWR | O_TRUNC, 0644)) < 0) {
+            SYS_LOGE("combine firware, open %s error(%s)", pDestPath, strerror(errno));
+            goto exit;
+        }
+
+        //write firmware.le buffer to file
+        if ((writeSize = write(desFd, pSrcData, srcSize)) <= 0)
+            SYS_LOGE("write firmware.le data error,write size: %d", writeSize);
+        close(desFd);
+        desFd = -1;
+        saveFile(pCrcName, keyCrcData, HDCP_RX22_KEY_CRC_LEN);
+        ret= true;
+    }
+exit:
+    if (NULL != pKeyBuffer)
+        delete[] pKeyBuffer;
+
+    if (srcFd >= 0)
+        close(srcFd);
+    if (desFd >= 0)
+        close(desFd);
+
+    if (NULL != pSrcData)
+        free(pSrcData);
+    if (NULL != pInsertData)
+        free(pInsertData);
+    return ret;
+}
+
+
 int HDCPRxKey::setHdcpRX22SupportStatus()
 {
     int ret = -1;
@@ -696,4 +945,90 @@ int HDCPRxKey::setHdcpRX22SupportStatus()
 
     close(fd);
     return ret;
+}
+
+void HDCPRxKey::getFirmwareSourcePath(const char* pRpvalue, char* pPath) {
+    if (pPath == NULL) {
+        SYS_LOGE("Firmware source path memory isn't ready");
+        return;
+    }
+
+    if (!strcmp(pRpvalue, "1")) {
+        strcpy(pPath, HDCP_RPRX22_SRC_FW_PATH);
+    } else {
+        strcpy(pPath, HDCP_RX22_SRC_FW_PATH);
+    }
+}
+
+void HDCPRxKey::getFirmwareDestPath(const char* pRpvalue, char* pPath) {
+    if (pPath == NULL) {
+        SYS_LOGE("Firmware dest path memory isn't ready");
+        return;
+    }
+
+    if (!strcmp(pRpvalue, "1")) {
+        strcpy(pPath, HDCP_RPRX22_DES_FW_PATH);
+    } else {
+        strcpy(pPath, HDCP_RX22_DES_FW_PATH);
+    }
+}
+
+void HDCPRxKey::getRepeaterValue(char* pRpvalue) {
+    if (pRpvalue != NULL) {
+        sysWrite.readSysfs(HDMI_TX_REPEATER_PATH, pRpvalue);
+    }
+}
+
+int HDCPRxKey::copyHdcpFwToParam(const char* firmwarele, const char* newFw) {
+    int iRet = 0;
+    FILE* fd_src        = NULL;
+    FILE* fd_dest       = NULL;
+
+    //Copy file
+    int keyLen = 0;
+    int rwLen = 0;
+    int wantLen = 0;
+    int itemSz = 0;
+
+    SYS_LOGD("generate hdcp tx firmware.le path:%s, des path:%s", firmwarele, newFw);
+
+    size_t filesize = getFileSize(firmwarele);
+
+    char *fwBuf = new char[filesize + 1];
+    if (!fwBuf) {
+        SYS_LOGE("[%d] Exception: fail to alloc buffer\n", __LINE__);
+        return -1;
+    }
+
+    fd_src = fopen(firmwarele, "rb");
+    if (!fd_src) {
+        SYS_LOGE("fail in open file(%s)\n", firmwarele);
+        iRet = -1;
+        goto _exit4;
+    }
+
+    fd_dest = fopen(newFw, "wb");
+    if (!fd_dest) {
+        SYS_LOGE("fail in open file(%s)\n", newFw);
+        iRet = -1;
+        goto _exit4;
+    }
+
+    do {
+        rwLen = fread(fwBuf, 1, filesize, fd_src);
+        if (!rwLen) break;
+        wantLen = fwrite(fwBuf, 1, rwLen, fd_dest);
+        if (wantLen != rwLen) {
+            SYS_LOGE("wantLen %d != rwLen %d\n", wantLen, rwLen);
+            iRet = -1;
+            goto _exit4;
+        }
+    } while (rwLen);
+
+_exit4:
+    if (fwBuf) delete[] fwBuf;
+    if (fd_src) fclose(fd_src);
+    if (fd_dest) fclose(fd_dest);
+
+    return iRet;
 }

@@ -1,7 +1,17 @@
+/*
+ * Copyright (c) 2014 Amlogic, Inc. All rights reserved.
+ *
+ * This source code is subject to the terms and conditions defined in the
+ * file 'LICENSE' which is part of this source code package.
+ *
+ * Description:
+ *     AMLOGIC DaylightSavingTime
+ */
+
 package com.droidlogic.app;
 
 import android.os.SystemClock;
-import android.os.ServiceManager;
+//import android.os.ServiceManager;
 import android.app.AlarmManager;
 import android.app.Activity;
 import android.content.Context;
@@ -22,8 +32,8 @@ public class DaylightSavingTime {
 
     private static final String TAG = "DaylightSavingTime";
 
-    private static final String DAYLIGHT_SAVING_TIME = "persist.sys.daylight.saving";
-    private static final String IN_DAYLIGHT_SAVING_TIME = "persist.sys.in.daylight.saving";
+    private static final String DAYLIGHT_SAVING_TIME = "persist.vendor.sys.daylight.saving";
+    private static final String IN_DAYLIGHT_SAVING_TIME = "persist.vendor.sys.in.daylight.saving";
     private static final int DAYLIGHT_TIME_AUTO = 0;
     private static final int DAYLIGHT_TIME_ON = 1;
     private static final int DAYLIGHT_TIME_OFF = 2;
@@ -34,7 +44,7 @@ public class DaylightSavingTime {
     private static DaylightSavingTime mDaylightSavingTime = null;
 
     private DaylightSavingTime() {
-        mSystemControlManager = new SystemControlManager(null);
+        mSystemControlManager = SystemControlManager.getInstance();
     }
 
     public static synchronized DaylightSavingTime getInstance() {

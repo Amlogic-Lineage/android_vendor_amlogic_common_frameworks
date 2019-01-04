@@ -36,6 +36,7 @@
 #include <pthread.h>
 #include <linux/fb.h>
 #include <semaphore.h>
+#include <utils/Mutex.h>
 
 #include "ubootenv/Ubootenv.h"
 #ifndef RECOVERY_MODE
@@ -77,6 +78,7 @@ using namespace android;
 #define DISPLAY_FB0_BLANK               "/sys/class/graphics/fb0/blank"
 #define DISPLAY_FB1_BLANK               "/sys/class/graphics/fb1/blank"
 #define SYS_DISABLE_VIDEO               "/sys/class/video/disable_video"
+#define SYS_DISPLAY_RESOLUTION          "/sys/class/video/device_resolution"
 
 #define DISPLAY_FB0_FREESCALE           "/sys/class/graphics/fb0/free_scale"
 #define DISPLAY_FB1_FREESCALE           "/sys/class/graphics/fb1/free_scale"
@@ -179,6 +181,8 @@ using namespace android;
 //HDCP RX
 #define HDMI_RX_PLUG_UEVENT             "DEVPATH=/devices/platform/ffd26000.hdmirx/hdmirx/hdmirx0/rx22"               //"DEVPATH=/devices/virtual/switch/hdmirx_hpd"//1:plugin 0:plug out
 #define HDMI_RX_AUTH_UEVENT             "DEVPATH=/devices/platform/ffd26000.hdmirx/hdmirx/hdmirx0/rp_auth"        //"DEVPATH=/devices/virtual/switch/hdmirx_hdcp_auth"//0:FAIL 1:HDCP14 2:HDCP22
+#define HDMI_RX_PLUG_PATH               "sys/class/extcon/rx22"
+#define HDMI_RX_AUTH_PATH               "sys/class/extcon/rp_auth"
 
 #define HDMI_RX_PLUG_OUT                "0"
 #define HDMI_RX_PLUG_IN                 "1"
@@ -196,27 +200,29 @@ using namespace android;
 #define VIDEO_LAYER_DISABLE             "1"
 #define VIDEO_LAYER_AUTO_ENABLE         "2"//2:enable video layer when first frame data come
 
-#define PROP_TVSOC_AS_MBOX              "ro.tvsoc.as.mbox"
+#define PROP_TVSOC_AS_MBOX              "tv.soc.as.mbox"
 
-#define PROP_HDMIONLY                   "ro.platform.hdmionly"
-#define PROP_SUPPORT_4K                 "ro.platform.support.4k"
-#define PROP_SUPPORT_OVER_4K30          "ro.platform.support.over.4k30"
+#define PROP_HDMIONLY                   "ro.vendor.platform.hdmionly"
+#define PROP_SUPPORT_4K                 "ro.vendor.platform.support.4k"
+#define PROP_SUPPORT_OVER_4K30          "ro.vendor.platform.support.over.4k30"
 #define PROP_LCD_DENSITY                "ro.sf.lcd_density"
 #define PROP_WINDOW_WIDTH               "const.window.w"
 #define PROP_WINDOW_HEIGHT              "const.window.h"
-#define PROP_HAS_CVBS_MODE              "ro.platform.has.cvbsmode"
-#define PROP_BEST_OUTPUT_MODE           "ro.platform.best_outputmode"
+#define PROP_HAS_CVBS_MODE              "ro.vendor.platform.has.cvbsmode"
+#define PROP_BEST_OUTPUT_MODE           "ro.vendor.platform.best_outputmode"
 #define PROP_BOOTANIM                   "init.svc.bootanim"
 #define PROP_FS_MODE                    "const.filesystem.mode"
 #define PROP_BOOTANIM_DELAY             "const.bootanim.delay"
 #define PROP_BOOTVIDEO_SERVICE          "service.bootvideo"
-#define PROP_DEEPCOLOR                  "sys.open.deepcolor" //default close this function, when reboot
-#define PROP_BOOTCOMPLETE               "dev.bootcomplete"
-#define PROP_DOLBY_VISION_ENABLE        "persist.sys.dolbyvision.enable"
-#define PROP_DOLBY_VISION_TYPE          "persist.sys.dolbyvision.type"
-#define PROP_DOLBY_VISION_PRIORITY      "persist.sys.graphics.priority"
-#define PROP_HDR_MODE_STATE             "persist.sys.hdr.state"
-#define PROP_SDR_MODE_STATE             "persist.sys.sdr.state"
+#define PROP_DEEPCOLOR                  "vendor.sys.open.deepcolor" //default close this function, when reboot
+#define PROP_BOOTCOMPLETE               "service.bootanim.exit"
+#define PROP_DOLBY_VISION_ENABLE        "persist.vendor.sys.dolbyvision.enable"
+#define PROP_DOLBY_VISION_TYPE          "persist.vendor.sys.dolbyvision.type"
+#define PROP_DOLBY_VISION_PRIORITY      "persist.vendor.sys.graphics.priority"
+#define PROP_HDR_MODE_STATE             "persist.vendor.sys.hdr.state"
+#define PROP_SDR_MODE_STATE             "persist.vendor.sys.sdr.state"
+#define PROP_DISPLAY_SIZE_CHECK         "vendor.display-size.check"
+#define PROP_DISPLAY_SIZE               "vendor.display-size"
 
 #define HDR_MODE_OFF                    "0"
 #define HDR_MODE_ON                     "1"
@@ -241,6 +247,9 @@ using namespace android;
 #define UBOOTENV_OUTPUTMODE             "ubootenv.var.outputmode"
 #define UBOOTENV_ISBESTMODE             "ubootenv.var.is.bestmode"
 #define UBOOTENV_EDIDCRCVALUE           "ubootenv.var.edid.crcvalue"
+
+#define UBOOTENV_REBOOT_MODE           "ubootenv.var.reboot_mode_android"
+
 
 #define FULL_WIDTH_480                  720
 #define FULL_HEIGHT_480                 480
@@ -477,8 +486,12 @@ private:
     int mDisplayType;
     bool mVideoPlaying;
 
+    mutex_t mEnvLock;
+
     int mDisplayWidth;
     int mDisplayHeight;
+
+    char mRebootMode[128];
 
     char mSocType[64];
     char mDefaultUI[64];//this used for mbox
@@ -492,6 +505,7 @@ private:
 
     // bootAnimation flag
     int mBootanimStatus;
+    bool setDolbyVisionState = true;
 #ifndef RECOVERY_MODE
     sp<SystemControlNotify> mNotifyListener;
 #endif

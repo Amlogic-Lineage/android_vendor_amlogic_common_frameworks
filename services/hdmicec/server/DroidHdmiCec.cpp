@@ -45,7 +45,8 @@ DroidHdmiCec::DroidHdmiCec() : mDeathRecipient(new DeathRecipient(this))
     mHdmiCecControl = new HdmiCecControl();
     mHdmiCecControl->setEventObserver(this);
     ALOGI("--ww--DroidHdmiCec::DroidHdmiCec");
-    mDebug = property_get_bool("persist.hdmicec.debug", true);
+    //mDebug = property_get_bool("persist.hdmicec.debug", true);
+    mDebug = true;
 }
 
 DroidHdmiCec::~DroidHdmiCec()
@@ -123,7 +124,6 @@ Return<SendMessageResult> DroidHdmiCec::sendMessage(const CecMessage& message, b
         ALOGE("sendMessage body size > %d", CEC_MESSAGE_BODY_MAX_LENGTH);
         return static_cast<SendMessageResult>(HDMI_RESULT_FAIL);
     }
-    ALOGE("DroidHdmiCec::sendMessage");
     if (NULL != mHdmiCecControl) {
         //change message from hwbinder data structure to needed data structure
         cec_message_t msg;
@@ -281,7 +281,7 @@ void DroidHdmiCec::onEventUpdate(const hdmi_cec_event_t* event)
     int clientSize = mClients.size();
     for (int i = 0; i < clientSize; i++) {
         if (mClients[i] != nullptr) {
-            ALOGI("%s, client index:%d, connect type:%s, event:%s", __FUNCTION__, i, getConnectTypeStr((ConnectType)i), getEventTypeStr(event->eventType));
+            //ALOGI("%s, client index:%d, connect type:%s, event:%s", __FUNCTION__, i, getConnectTypeStr((ConnectType)i), getEventTypeStr(event->eventType));
             mClients[i]->notifyCallback(hidlEvent);
         }
     }

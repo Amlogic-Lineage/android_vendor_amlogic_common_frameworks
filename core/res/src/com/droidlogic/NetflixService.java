@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2014 Amlogic, Inc. All rights reserved.
+ *
+ * This source code is subject to the terms and conditions defined in the
+ * file 'LICENSE' which is part of this source code package.
+ *
+ * Description:
+ *     AMLOGIC NetflixService
+ */
+
 package com.droidlogic;
 
 import android.app.ActivityManager;
@@ -12,11 +22,18 @@ import android.content.IntentFilter;
 import android.os.IBinder;
 import android.os.Process;
 import android.os.SystemProperties;
+import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.Log;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStreamReader;
+import java.lang.StringBuffer;
 import java.util.List;
 import java.util.Scanner;
+import com.droidlogic.app.SystemControlManager;
 
 public class NetflixService extends Service {
     private static final String TAG = "NetflixService";
@@ -31,11 +48,16 @@ public class NetflixService extends Service {
     public static final String NETFLIX_STATUS_CHANGE        = "com.netflix.action.STATUS_CHANGE";
     public static final String NETFLIX_DIAL_STOP            = "com.netflix.action.DIAL_STOP";
     private static final String VIDEO_SIZE_DEVICE           = "/sys/class/video/device_resolution";
+    private static final String WAKEUP_REASON_DEVICE        = "/sys/devices/platform/aml_pm/suspend_reason";
+    private static final String NRDP_PLATFORM_CAP           = "nrdp_platform_capabilities";
+    private static final String NRDP_AUDIO_PLATFORM_CAP     = "nrdp_audio_platform_capabilities";
+    private static final String NRDP_PLATFORM_CONFIG_DIR    = "/vendor/etc/";
+    private static final int WAKEUP_REASON_CUSTOM           = 9;
     private static boolean mLaunchDialService               = true;
 
     private boolean mIsNetflixFg = false;
     private Context mContext;
-
+    SystemControlManager mSCM;
     private BroadcastReceiver mReceiver = new BroadcastReceiver(){
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -56,10 +78,21 @@ public class NetflixService extends Service {
     public void onCreate() {
         super.onCreate();
         mContext = this;
-
+        mSCM = SystemControlManager.getInstance();
         IntentFilter filter = new IntentFilter(NETFLIX_DIAL_STOP);
         filter.setPriority (IntentFilter.SYSTEM_HIGH_PRIORITY);
         mContext.registerReceiver (mReceiver, filter);
+
+        String buildDate = SystemProperties.get("ro.build.version.incremental", "");
+        boolean needUpdate = !buildDate.equals(SettingsPref.getSavedBuildDate(mContext));
+
+        setNrdpCapabilitesIfNeed(NRDP_PLATFORM_CAP, needUpdate);
+        setNrdpCapabilitesIfNeed(NRDP_AUDIO_PLATFORM_CAP, needUpdate);
+        if (needUpdate) {
+            SettingsPref.setSavedBuildDate(mContext, buildDate);
+        }
+
+        startNetflixIfNeed();
 
         new ObserverThread ("NetflixObserver").start();
     }
@@ -77,6 +110,57 @@ public class NetflixService extends Service {
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    private void startNetflixIfNeed() {
+        Scanner scanner = null;
+        int reason = -1;
+        try {
+            scanner = new Scanner (new File(WAKEUP_REASON_DEVICE));
+            reason = scanner.nextInt();
+            scanner.close();
+        } catch (Exception e) {
+            if (scanner != null)
+                scanner.close();
+            e.printStackTrace();
+            return;
+        }
+
+        if (reason == WAKEUP_REASON_CUSTOM) {
+            Intent netflixIntent = new Intent();
+            netflixIntent.setAction("com.netflix.ninja.intent.action.NETFLIX_KEY");
+            netflixIntent.setPackage("com.netflix.ninja");
+            netflixIntent.putExtra("power_on", true);
+            netflixIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+
+            Log.i(TAG, "start netflix by power on");
+            mContext.sendBroadcast(netflixIntent,"com.netflix.ninja.permission.NETFLIX_KEY");
+        }
+    }
+
+    private void setNrdpCapabilitesIfNeed(String capName, boolean needUpdate) {
+        String cap = Settings.Global.getString(getContentResolver(), capName);
+        Log.i(TAG, capName + ":\n" + cap);
+        if (!needUpdate && !TextUtils.isEmpty(cap)) {
+            return;
+        }
+
+        try {
+            Scanner scanner = new Scanner(new File(NRDP_PLATFORM_CONFIG_DIR + capName + ".json"));
+            StringBuffer sb = new StringBuffer();
+
+            while (scanner.hasNextLine()) {
+                sb.append(scanner.nextLine());
+                sb.append('\n');
+            }
+
+            Settings.Global.putString(getContentResolver(), capName, sb.toString());
+            scanner.close();
+        } catch (java.io.FileNotFoundException e) {
+            Log.d(TAG, e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public int getNetflixPid() {
@@ -123,6 +207,27 @@ public class NetflixService extends Service {
         return false;
     }
 
+    public static String setSystemProperty(String key, String defValue) {
+        String getValue = defValue;
+        try {
+            Class[] typeArgs = new Class[2];
+            typeArgs[0] = String.class;
+            typeArgs[1] = String.class;
+
+            Object[] valueArgs = new Object[2];
+            valueArgs[0] = key;
+            valueArgs[1] = defValue;
+
+            getValue = (String)Class.forName("android.os.SystemProperties")
+                    .getMethod("set", typeArgs)
+                    .invoke(null, valueArgs);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return getValue;
+    }
+
     class ObserverThread extends Thread {
         public ObserverThread (String name) {
             super (name);
@@ -146,9 +251,13 @@ public class NetflixService extends Service {
                     intent.putExtra ("status", fg ? 1 : 0);
                     intent.putExtra ("pid", fg?getNetflixPid():-1);
                     mContext.sendBroadcast (intent);
+
+                    mSCM.setProperty ("vendor.netflix.state", fg ? "fg" : "bg");
                 }
 
-                if (SystemProperties.getBoolean ("sys.display-size.check", true)) {
+/* move setting display-size code to systemcontrol
+                if (SystemProperties.getBoolean ("sys.display-size.check", true) ||
+                    SystemProperties.getBoolean ("vendor.display-size.check", true)) {
                     try {
                         Scanner sc = new Scanner (new File(VIDEO_SIZE_DEVICE));
                         if (sc.hasNext("\\d+x\\d+")) {
@@ -157,14 +266,19 @@ public class NetflixService extends Service {
                             int h = Integer.parseInt (parts[1]);
                             //Log.i(TAG, "Video resolution: " + w + "x" + h);
 
-                            String prop = SystemProperties.get ("sys.display-size", "0x0");
-                            String[] parts_prop = prop.split ("x");
-                            int wd = Integer.parseInt (parts_prop[0]);
-                            int wh = Integer.parseInt (parts_prop[1]);
+                            String nexflixProps[] = {"sys.display-size", "vendor.display-size"};
+                            for (String propName:nexflixProps) {
+                                String prop = SystemProperties.get (propName, "0x0");
+                                String[] parts_prop = prop.split ("x");
+                                int wd = Integer.parseInt (parts_prop[0]);
+                                int wh = Integer.parseInt (parts_prop[1]);
 
-                            if ((w != wd) || (h != wh)) {
-                                SystemProperties.set ("sys.display-size", String.format("%dx%d", w, h));
-                                //Log.i(TAG, "set sys.display-size property to " + String.format("%dx$d", w, h));
+                                if ((w != wd) || (h != wh)) {
+                                    mSCM.setProperty(propName, String.format("%dx%d", w, h));
+                                    //setSystemProperty(propName, String.format("%dx%d", w, h));
+                                    //SystemProperties.set (propName, String.format("%dx%d", w, h));
+                                    //Log.i(TAG, "set sys.display-size property to " + String.format("%dx$d", w, h));
+                                }
                             }
                         } else {
                             //Log.i(TAG, "Video resolution no pattern found" + sc.nextLine());
@@ -175,6 +289,7 @@ public class NetflixService extends Service {
                         Log.i(TAG, "Error parsing video size device node");
                     }
                 }
+*/
             }
         }
     }

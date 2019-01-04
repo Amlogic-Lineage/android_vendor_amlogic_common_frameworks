@@ -23,6 +23,7 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Method;
 
 import android.content.Context;
 import android.content.Intent;
@@ -32,7 +33,7 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Log;
 import android.media.AudioManager;
-import android.media.AudioSystem;
+import android.media.AudioFormat;
 import android.content.ContentResolver;
 
 public class OutputModeManager {
@@ -91,12 +92,12 @@ public class OutputModeManager {
     public static final String ENV_IS_BEST_MODE             = "ubootenv.var.is.bestmode";
     public static final String ENV_COLORATTRIBUTE           = "ubootenv.var.colorattribute";
 
-    public static final String PROP_BEST_OUTPUT_MODE        = "ro.platform.best_outputmode";
-    public static final String PROP_HDMI_ONLY               = "ro.platform.hdmionly";
-    public static final String PROP_SUPPORT_4K              = "ro.platform.support.4k";
-    public static final String PROP_DEEPCOLOR               = "sys.open.deepcolor";
-    public static final String PROP_DTSDRCSCALE             = "persist.sys.dtsdrcscale";
-    public static final String PROP_DTSEDID                 = "persist.sys.dts.edid";
+    public static final String PROP_BEST_OUTPUT_MODE        = "ro.vendor.platform.best_outputmode";
+    public static final String PROP_HDMI_ONLY               = "ro.vendor.platform.hdmionly";
+    public static final String PROP_SUPPORT_4K              = "ro.vendor.platform.support.4k";
+    public static final String PROP_DEEPCOLOR               = "vendor.sys.open.deepcolor";
+    public static final String PROP_DTSDRCSCALE             = "persist.vendor.sys.dtsdrcscale";
+    public static final String PROP_DTSEDID                 = "persist.vendor.sys.dts.edid";
 
     public static final String FULL_WIDTH_480               = "720";
     public static final String FULL_HEIGHT_480              = "480";
@@ -111,11 +112,22 @@ public class OutputModeManager {
     public static final String FULL_WIDTH_4K2KSMPTE         = "4096";
     public static final String FULL_HEIGHT_4K2KSMPTE        = "2160";
 
-    public static final String DIGITAL_AUDIO_FORMAT  = "digital_audio_format";
+    public static final String DIGITAL_AUDIO_FORMAT          = "digital_audio_format";
+    public static final String DIGITAL_AUDIO_SUBFORMAT       = "digital_audio_subformat";
     public static final String PARA_PCM                      = "hdmi_format=0";
+    public static final String PARA_SPDIF                    = "hdmi_format=4";
     public static final String PARA_AUTO                     = "hdmi_format=5";
     public static final int DIGITAL_PCM                      = 0;
-    public static final int DIGITAL_AUTO                     = 1;
+    public static final int DIGITAL_SPDIF                    = 1;
+    public static final int DIGITAL_AUTO                     = 2;
+    public static final int DIGITAL_MANUAL                   = 3;
+    // DD/DD+/DTS
+    public static final String DIGITAL_AUDIO_SUBFORMAT_SPDIF  = "5,6,7";
+
+    private static final String NRDP_EXTERNAL_SURROUND =
+                                       "nrdp_external_surround_sound_enabled";
+    private static final int NRDP_ENABLE            = 1;
+    private static final int NRDP_DISABLE           = 0;
 
     public static final String BOX_LINE_OUT                          = "box_line_out";
     public static final String PARA_BOX_LINE_OUT_OFF         = "enable_line_out=false";
@@ -147,6 +159,15 @@ public class OutputModeManager {
     public static final int VIRTUAL_SURROUND_OFF                     = 0;
     public static final int VIRTUAL_SURROUND_ON                       = 1;
 
+    //surround sound formats, must sync with Settings.Global
+    public static final String ENCODED_SURROUND_OUTPUT = "encoded_surround_output";
+    public static final String ENCODED_SURROUND_OUTPUT_ENABLED_FORMATS =
+                "encoded_surround_output_enabled_formats";
+    public static final int ENCODED_SURROUND_OUTPUT_AUTO = 0;
+    public static final int ENCODED_SURROUND_OUTPUT_NEVER = 1;
+    public static final int ENCODED_SURROUND_OUTPUT_ALWAYS = 2;
+    public static final int ENCODED_SURROUND_OUTPUT_MANUAL = 3;
+
     public static final String SOUND_OUTPUT_DEVICE                         = "sound_output_device";
     public static final String PARA_SOUND_OUTPUT_DEVICE_SPEAKER  = "sound_output_device=speak";
     public static final String PARA_SOUND_OUTPUT_DEVICE_ARC       = "sound_output_device=arc";
@@ -170,6 +191,17 @@ public class OutputModeManager {
     public static final String SOUND_EFFECT_AGC_MAX_LEVEL       = "sound_effect_agc_level";
     public static final String SOUND_EFFECT_AGC_ATTRACK_TIME       = "sound_effect_agc_attrack";
     public static final String SOUND_EFFECT_AGC_RELEASE_TIME       = "sound_effect_agc_release";
+
+    public static final String DIGITAL_SOUND                = "digital_sound";
+    public static final String PCM                          = "PCM";
+    public static final String RAW                          = "RAW";
+    public static final String HDMI                         = "HDMI";
+    public static final String SPDIF                        = "SPDIF";
+    public static final String HDMI_RAW                     = "HDMI passthrough";
+    public static final String SPDIF_RAW                    = "SPDIF passthrough";
+    public static final int IS_PCM                          = 0;
+    public static final int IS_SPDIF_RAW                    = 1;
+    public static final int IS_HDMI_RAW                     = 2;
 
     public static final String DRC_MODE                     = "drc_mode";
     public static final String DTSDRC_MODE                  = "dtsdrc_mode";
@@ -214,7 +246,7 @@ public class OutputModeManager {
     public OutputModeManager(Context context) {
         mContext = context;
 
-        mSystenControl = new SystemControlManager(context);
+        mSystenControl = SystemControlManager.getInstance();
         mResolver = mContext.getContentResolver();
         currentOutputmode = readSysfs(DISPLAY_MODE);
         mAudioManager = (AudioManager) context.getSystemService(context.AUDIO_SERVICE);
@@ -542,6 +574,31 @@ public class OutputModeManager {
         task.start();
     }
 
+    public String getDigitalVoiceMode(){
+        return getBootenv(ENV_DIGIT_AUDIO, PCM);
+    }
+
+    public int autoSwitchHdmiPassthough () {
+        String mAudioCapInfo = readSysfsTotal(SYS_AUDIO_CAP);
+        if (mAudioCapInfo.contains("Dobly_Digital+")) {
+            setDigitalMode(HDMI_RAW);
+            return IS_HDMI_RAW;
+        } else if (mAudioCapInfo.contains("AC-3")
+                || (getPropertyBoolean(PROP_DTSEDID, false) && mAudioCapInfo.contains("DTS"))) {
+            setDigitalMode(SPDIF_RAW);
+            return IS_SPDIF_RAW;
+        } else {
+            setDigitalMode(PCM);
+            return IS_PCM;
+        }
+    }
+
+    public void setDigitalMode(String mode) {
+        // value : "PCM" ,"RAW","SPDIF passthrough","HDMI passthrough"
+        setBootenv(ENV_DIGIT_AUDIO, mode);
+        mSystenControl.setDigitalMode(mode);
+    }
+
     public void enableDobly_DRC (boolean enable) {
         if (enable) {       //open DRC
             writeSysfs(AUIDO_DSP_AC3_DRC, "drchighcutscale 0x64");
@@ -570,7 +627,17 @@ public class OutputModeManager {
         } else {
             setProperty(PROP_DTSDRCSCALE, DEFAULT_DRC_SCALE);
         }
+        setDtsDrcScaleSysfs();
     }
+
+    public void setDtsDrcScaleSysfs() {
+        String prop = getPropertyString(PROP_DTSDRCSCALE, DEFAULT_DRC_SCALE);
+        int val = Integer.parseInt(prop);
+        writeSysfs(AUIDO_DSP_DTS_DEC, String.format("0x%02x", val));
+    }
+    /**
+    * @Deprecated
+    **/
     public void setDTS_DownmixMode(String mode) {
         // 0: Lo/Ro;   1: Lt/Rt;  default 0
         int i = Integer.parseInt(mode);
@@ -580,7 +647,9 @@ public class OutputModeManager {
             writeSysfs(AUIDO_DSP_DTS_DEC, "dtsdmxmode" + " " + "0");
         }
     }
-
+    /**
+    * @Deprecated
+    **/
     public void enableDTS_DRC_scale_control (boolean enable) {
         if (enable) {
             writeSysfs(AUIDO_DSP_DTS_DEC, "dtsdrcscale 0x64");
@@ -588,7 +657,9 @@ public class OutputModeManager {
             writeSysfs(AUIDO_DSP_DTS_DEC, "dtsdrcscale 0");
         }
     }
-
+    /**
+    * @Deprecated
+    **/
     public void enableDTS_Dial_Norm_control (boolean enable) {
         if (enable) {
             writeSysfs(AUIDO_DSP_DTS_DEC, "dtsdialnorm 1");
@@ -722,25 +793,93 @@ public class OutputModeManager {
         */
     }
 
-    public void setDigitalAudioFormatOut(int mode) {
+    public void saveDigitalAudioFormatMode(int mode, String submode) {
+        String tmp;
+        int surround = Settings.Global.getInt(mResolver,
+                ENCODED_SURROUND_OUTPUT, -1);
         switch (mode) {
-            case DIGITAL_PCM:
-                mAudioManager.setParameters(PARA_PCM);
+            case DIGITAL_SPDIF:
                 Settings.Global.putInt(mResolver,
-                        Settings.Global.ENCODED_SURROUND_OUTPUT,
-                        Settings.Global.ENCODED_SURROUND_OUTPUT_NEVER);
+                        NRDP_EXTERNAL_SURROUND, NRDP_ENABLE);
+                Settings.Global.putInt(mResolver,
+                        DIGITAL_AUDIO_FORMAT, DIGITAL_SPDIF);
+                Settings.Global.putString(mResolver,
+                        DIGITAL_AUDIO_SUBFORMAT, DIGITAL_AUDIO_SUBFORMAT_SPDIF);
+                if (surround != ENCODED_SURROUND_OUTPUT_MANUAL)
+                    Settings.Global.putInt(mResolver,
+                            ENCODED_SURROUND_OUTPUT/*Settings.Global.ENCODED_SURROUND_OUTPUT*/,
+                            ENCODED_SURROUND_OUTPUT_MANUAL/*Settings.Global.ENCODED_SURROUND_OUTPUT_MANUAL*/);
+                tmp = Settings.Global.getString(mResolver,
+                        OutputModeManager.ENCODED_SURROUND_OUTPUT_ENABLED_FORMATS);
+                if (!DIGITAL_AUDIO_SUBFORMAT_SPDIF.equals(tmp))
+                    Settings.Global.putString(mResolver,
+                            ENCODED_SURROUND_OUTPUT_ENABLED_FORMATS,
+                            DIGITAL_AUDIO_SUBFORMAT_SPDIF);
+                break;
+            case DIGITAL_MANUAL:
+                if (submode == null)
+                    submode = "";
+
+                Settings.Global.putInt(mResolver,
+                        NRDP_EXTERNAL_SURROUND, NRDP_DISABLE);
+                Settings.Global.putInt(mResolver,
+                        DIGITAL_AUDIO_FORMAT, DIGITAL_MANUAL);
+                Settings.Global.putString(mResolver,
+                        DIGITAL_AUDIO_SUBFORMAT, submode);
+                if (surround != ENCODED_SURROUND_OUTPUT_MANUAL)
+                    Settings.Global.putInt(mResolver,
+                            ENCODED_SURROUND_OUTPUT/*Settings.Global.ENCODED_SURROUND_OUTPUT*/,
+                            ENCODED_SURROUND_OUTPUT_MANUAL/*Settings.Global.ENCODED_SURROUND_OUTPUT_MANUAL*/);
+                tmp = Settings.Global.getString(mResolver,
+                        OutputModeManager.ENCODED_SURROUND_OUTPUT_ENABLED_FORMATS);
+                if (!submode.equals(tmp))
+                    Settings.Global.putString(mResolver,
+                            ENCODED_SURROUND_OUTPUT_ENABLED_FORMATS, submode);
+                break;
+            case DIGITAL_AUTO:
+                Settings.Global.putInt(mResolver,
+                        NRDP_EXTERNAL_SURROUND, NRDP_DISABLE);
+                Settings.Global.putInt(mResolver,
+                        DIGITAL_AUDIO_FORMAT, DIGITAL_AUTO);
+                if (surround != ENCODED_SURROUND_OUTPUT_AUTO)
+                    Settings.Global.putInt(mResolver,
+                            ENCODED_SURROUND_OUTPUT/*Settings.Global.ENCODED_SURROUND_OUTPUT*/,
+                            ENCODED_SURROUND_OUTPUT_AUTO/*Settings.Global.ENCODED_SURROUND_OUTPUT_AUTO*/);
+                break;
+            case DIGITAL_PCM:
+            default:
+                Settings.Global.putInt(mResolver,
+                        NRDP_EXTERNAL_SURROUND, NRDP_DISABLE);
+                Settings.Global.putInt(mResolver,
+                        DIGITAL_AUDIO_FORMAT, DIGITAL_PCM);
+                if (surround != ENCODED_SURROUND_OUTPUT_NEVER)
+                    Settings.Global.putInt(mResolver,
+                            ENCODED_SURROUND_OUTPUT/*Settings.Global.ENCODED_SURROUND_OUTPUT*/,
+                            ENCODED_SURROUND_OUTPUT_NEVER/*Settings.Global.ENCODED_SURROUND_OUTPUT_NEVER*/);
+                break;
+        }
+    }
+
+    public void setDigitalAudioFormatOut(int mode) {
+        setDigitalAudioFormatOut(mode, "");
+    }
+
+    public void setDigitalAudioFormatOut(int mode, String submode) {
+        Log.d(TAG, "setDigitalAudioFormatOut: mode="+mode+", submode="+submode);
+        saveDigitalAudioFormatMode(mode, submode);
+        switch (mode) {
+            case DIGITAL_SPDIF:
+                mAudioManager.setParameters(PARA_SPDIF);
                 break;
             case DIGITAL_AUTO:
                 mAudioManager.setParameters(PARA_AUTO);
-                Settings.Global.putInt(mResolver,
-                        Settings.Global.ENCODED_SURROUND_OUTPUT,
-                        Settings.Global.ENCODED_SURROUND_OUTPUT_AUTO);
                 break;
+            case DIGITAL_MANUAL:
+                mAudioManager.setParameters(PARA_AUTO);
+                break;
+            case DIGITAL_PCM:
             default:
                 mAudioManager.setParameters(PARA_PCM);
-                Settings.Global.putInt(mResolver,
-                        Settings.Global.ENCODED_SURROUND_OUTPUT,
-                        Settings.Global.ENCODED_SURROUND_OUTPUT_NEVER);
                 break;
         }
     }
@@ -799,7 +938,7 @@ public class OutputModeManager {
     }
 
     public void initSoundParametersAfterBoot() {
-        final boolean istv = mSystenControl.getPropertyBoolean("ro.platform.has.tvuimode", false);
+        final boolean istv = mSystenControl.getPropertyBoolean("ro.vendor.platform.has.tvuimode", false);
         if (!istv) {
             final int boxlineout = Settings.Global.getInt(mResolver, BOX_LINE_OUT, BOX_LINE_OUT_OFF);
             enableBoxLineOutAudio(boxlineout == BOX_LINE_OUT_ON);
@@ -808,16 +947,16 @@ public class OutputModeManager {
         } else {
             final int virtualsurround = Settings.Global.getInt(mResolver, VIRTUAL_SURROUND, VIRTUAL_SURROUND_OFF);
             setVirtualSurround(virtualsurround);
-            int device = mAudioManager.getDevicesForStream(AudioManager.STREAM_MUSIC);
+            /*int device = mAudioManager.getDevicesForStream(AudioManager.STREAM_MUSIC);
             if ((device & AudioSystem.DEVICE_OUT_SPEAKER) != 0) {
                 final int soundoutput = Settings.Global.getInt(mResolver, SOUND_OUTPUT_DEVICE, SOUND_OUTPUT_DEVICE_SPEAKER);
                 setSoundOutputStatus(soundoutput);
-            }
+            }*/
         }
     }
 
     public void resetSoundParameters() {
-        final boolean istv = mSystenControl.getPropertyBoolean("ro.platform.has.tvuimode", false);
+        final boolean istv = mSystenControl.getPropertyBoolean("ro.vendor.platform.has.tvuimode", false);
         if (!istv) {
             enableBoxLineOutAudio(false);
             enableBoxHdmiAudio(false);

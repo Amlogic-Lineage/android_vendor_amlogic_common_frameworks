@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2014 Amlogic, Inc. All rights reserved.
+ *
+ * This source code is subject to the terms and conditions defined in the
+ * file 'LICENSE' which is part of this source code package.
+ *
+ * Description:
+ *     AMLOGIC DisplayPositionManager
+ */
+
 package com.droidlogic.app;
 
 import android.content.Context;
@@ -42,7 +52,7 @@ public class DisplayPositionManager {
 
     public DisplayPositionManager(Context context) {
         mContext = context;
-        mSystenControl = new SystemControlManager(mContext);
+        mSystenControl = SystemControlManager.getInstance();
         mOutputModeManager = new OutputModeManager(mContext);
         initPostion();
     }

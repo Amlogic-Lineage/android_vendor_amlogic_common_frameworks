@@ -22,6 +22,7 @@
 #define LOG_TAG "SystemControl"
 #define LOG_NDEBUG 0
 
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <utils/Log.h>
 #include <cutils/properties.h>
@@ -39,6 +40,8 @@
 
 namespace android {
 
+int (*func_optimization)(const char *pkg, const char *cls, const std::vector<std::string>& procList);
+
 SystemControlService* SystemControlService::instantiate(const char *cfgpath) {
     SystemControlService *sysControlIntf = new SystemControlService(cfgpath);
     return sysControlIntf;
@@ -48,6 +51,7 @@ SystemControlService::SystemControlService(const char *path)
     : mLogLevel(LOG_LEVEL_DEFAULT) {
 
     ALOGI("SystemControlService instantiate begin");
+
     pUbootenv = new Ubootenv();
     pSysWrite = new SysWrite();
 
@@ -66,6 +70,22 @@ SystemControlService::SystemControlService(const char *path)
         if ( pUbootenv->updateValue("ubootenv.var.firstboot", "0") < 0 )
             ALOGE("set firstboot to 0 fail");
     }
+
+    void* handle = dlopen("liboptimization.so", RTLD_NOW);
+    if (NULL != handle) {
+        void (*func_init)();
+        func_init = (void (*)())dlsym(handle, "_ZN7android10initConfigEv");
+        if (NULL != func_init)
+            func_init();
+        else
+            ALOGE("has not find initConfig from liboptimization.so , %s", dlerror());
+
+        func_optimization = (int (*)(const char *, const char *, const std::vector<std::string>&))dlsym(handle, "_ZN7android15appOptimizationEPKcS1_RKNSt3__16vectorINS2_12basic_stringIcNS2_11char_traitsIcEENS2_9allocatorIcEEEENS7_IS9_EEEE");
+        if (NULL == func_optimization)
+            ALOGE("has not find appOptimization from liboptimization.so , %s", dlerror());
+    }
+    else
+        ALOGE("open liboptimization.so fail%s", dlerror());
 
     ALOGI("SystemControlService instantiate done");
 }
@@ -535,6 +555,13 @@ int64_t SystemControlService::resolveResolutionValue(const std::string& mode) {
 
 void SystemControlService::setListener(const sp<SystemControlNotify>& listener) {
     pDisplayMode->setListener(listener);
+}
+
+void SystemControlService::setAppInfo(const std::string& pkg, const std::string& cls, const std::vector<std::string>& procList) {
+    //ALOGI("setAppInfo pkg :%s, cls:%s", pkg.c_str(), cls.c_str());
+    if (func_optimization != NULL) {
+        func_optimization(pkg.c_str(), cls.c_str(), procList);
+    }
 }
 
 //3D

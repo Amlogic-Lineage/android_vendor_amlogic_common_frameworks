@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2014 Amlogic, Inc. All rights reserved.
+ *
+ * This source code is subject to the terms and conditions defined in the
+ * file 'LICENSE' which is part of this source code package.
+ *
+ * Description:
+ *     AMLOGIC SubtitleManager
+ */
+
 package com.droidlogic.app;
 
 import android.content.Context;
@@ -10,11 +20,12 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
-import android.os.ServiceManager;
+//import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.provider.MediaStore;
 import android.util.Log;
 import java.lang.Integer;
+import java.lang.reflect.Method;
 import java.lang.Thread;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -24,6 +35,11 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
+
+import android.content.ComponentName;
+import android.content.Intent;
+import android.content.ServiceConnection;
+
 
 import com.droidlogic.app.MediaPlayerExt;
 
@@ -39,13 +55,29 @@ public class SubtitleManager {
         private int RETRY_MAX = 10;
         private boolean mOpen = false;
 
+        private Context mContext;
+
         //IOType, should sync with \vendor\amlogic\apps\SubTitle\jni\subtitle\sub_io.h IOType
         public static final int IO_TYPE_DEV = 0;
         public static final int IO_TYPE_SOCKET = 1;
         private int mIOType = IO_TYPE_DEV;
         private ArrayList<Integer> mInnerTrackIdx = null;
 
-        public SubtitleManager (MediaPlayerExt mp) {
+        private Intent intent = null;
+
+        public SubtitleManager (Context context) {
+            mContext = context;
+            //mMediaPlayer = mp;
+            mInnerTrackIdx = new ArrayList<Integer>();
+            mDebug = false;
+            checkDebug();
+            if (!disable()) {
+                getService();
+            }
+        }
+
+        public SubtitleManager (Context context, MediaPlayerExt mp) {
+            mContext = context;
             mMediaPlayer = mp;
             mInnerTrackIdx = new ArrayList<Integer>();
             mDebug = false;
@@ -55,12 +87,16 @@ public class SubtitleManager {
             }
         }
 
+        public void setMediaPlayer (MediaPlayerExt mp) {
+            mMediaPlayer = mp;
+        }
+
         private boolean disable() {
             boolean ret = false;
             try {
                 ret = (boolean)Class.forName("android.os.SystemProperties")
                     .getMethod("getBoolean", new Class[] { String.class, Boolean.TYPE })
-                    .invoke(null, new Object[] { "sys.subtitle.disable", true });
+                    .invoke(null, new Object[] { "vendor.sys.subtitle.disable", false });
             } catch (Exception e) {
                 Log.e(TAG,"[start]Exception e:" + e);
             }
@@ -68,14 +104,14 @@ public class SubtitleManager {
         }
 
         private void checkDebug() {
-            if (SystemProperties.getBoolean ("sys.subtitle.debug", false) ) {
+            if (SystemProperties.getBoolean ("vendor.sys.subtitle.debug", true) ) {
                 mDebug = true;
             }
         }
 
         private boolean optionEnable() {
             boolean ret = false;
-            if (SystemProperties.getBoolean ("sys.subtitleOption.enable", false) ) {
+            if (SystemProperties.getBoolean ("vendor.sys.subtitleOption.enable", false) ) {
                 ret = true;
             }
             return ret;
@@ -174,7 +210,7 @@ public class SubtitleManager {
             } catch (RemoteException e) {
                 throw new RuntimeException (e);
             }
-
+            LOGI("[open] innerTotal:" + innerTotal() +", mIOType:" + mIOType);
             if (innerTotal() > 0 && mIOType == IO_TYPE_SOCKET && mMediaPlayer != null) {
                 mMediaPlayer.selectTrack(mInnerTrackIdx.get(0));
             }
@@ -439,14 +475,19 @@ public class SubtitleManager {
         }
 
         private void getService() {
+            LOGI("[getService]");
             int retry = RETRY_MAX;
+            boolean mIsBind = false;
             try {
                 synchronized (this) {
                     while (true) {
-                        IBinder b = ServiceManager.getService ("subtitle_service"/*Context.SUBTITLE_SERVICE*/);
-                        mService = ISubTitleService.Stub.asInterface (b);
-                        LOGI("[getService] mService:" + mService + ", retry:" + retry);
-                        if (null != mService || retry <= 0) {
+                        //IBinder b = ServiceManager.getService ("subtitle_service"/*Context.SUBTITLE_SERVICE*/);
+                        intent = new Intent();
+                        intent.setAction("com.droidlogic.SubTitleServer");
+                        intent.setPackage("com.droidlogic.SubTitleService");
+                        mIsBind = mContext.bindService(intent, serConn, mContext.BIND_AUTO_CREATE);
+                        LOGI("[getService] mIsBind:" + mIsBind + ", retry:" + retry);
+                        if (mIsBind || retry <= 0) {
                             break;
                         }
                         retry --;
@@ -455,6 +496,19 @@ public class SubtitleManager {
                 }
             }catch(InterruptedException e){}
         }
+
+        private ServiceConnection serConn = new ServiceConnection() {
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+                LOGI("[onServiceDisconnected]mService:"+mService);
+                mService = null;
+            }
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder service) {
+                mService = ISubTitleService.Stub.asInterface(service);
+                LOGI("SubTitleClient.onServiceConnected()..mService:"+mService);
+            }
+        };
 
         public void release() {
             mOpen= false;
@@ -590,7 +644,7 @@ public class SubtitleManager {
         private void setIOType() {
             LOGI("[setIOType]mMediaPlayer:" + mMediaPlayer);
 
-            mIOType = IO_TYPE_DEV;
+            mIOType = IO_TYPE_SOCKET;       //default amnuplayer
             if (mMediaPlayer != null) {
                 String typeStr = mMediaPlayer.getStringParameter(mMediaPlayer.KEY_PARAMETER_AML_PLAYER_TYPE_STR);
                 LOGI("[setIOType]typeStr:" + typeStr);
@@ -725,8 +779,10 @@ public class SubtitleManager {
                                 }
                                 LOGI("[runnable]showSub:" + pos);
                             }
-
-                            mService.showSub (pos);
+                            if (!mThreadStop) {
+                                mService.showSub (pos);
+                            }
+                            //mService.showSub (pos);
                         } else {
                             mThreadStop = true;
                             break;
