@@ -377,7 +377,13 @@ void DisplayMode::setSourceDisplay(output_mode_state state) {
     }
 
 #if defined(ODROIDN2)
-    strcpy(outputmode, mDefaultUI);
+    char value[64];
+    getBootEnv(UBOOTENV_HDMIMODE, value);
+    if (strlen(value) == 0) {
+        strcpy(value, "1080p60hz");
+    }
+    SYS_LOGI("getBootEnv(%s, %s)", UBOOTENV_HDMIMODE, value);
+    strcpy(outputmode, value);
 #endif
 
     SYS_LOGI("display sink type:%d [0:none, 1:sink, 2:repeater], old outputmode:%s, new outputmode:%s\n",
