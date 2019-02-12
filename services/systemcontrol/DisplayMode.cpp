@@ -384,6 +384,7 @@ void DisplayMode::setSourceDisplay(output_mode_state state) {
     }
     SYS_LOGI("getBootEnv(%s, %s)", UBOOTENV_HDMIMODE, value);
     strcpy(outputmode, value);
+    strcpy(mDefaultUI, value);
 #endif
 
     SYS_LOGI("display sink type:%d [0:none, 1:sink, 2:repeater], old outputmode:%s, new outputmode:%s\n",
@@ -398,6 +399,7 @@ void DisplayMode::setSourceDisplay(output_mode_state state) {
     }
 
     //output mode not the same
+#if !defined(ODROIDN2)
     if (strcmp(data.current_mode, outputmode)) {
         if (OUPUT_MODE_STATE_INIT == state) {
             //when change mode, need close uboot logo to avoid logo scaling wrong
@@ -406,6 +408,8 @@ void DisplayMode::setSourceDisplay(output_mode_state state) {
             pSysWrite->writeSysfs(DISPLAY_FB1_FREESCALE, "0");
         }
     }
+#endif
+
     DetectDolbyVisionOutputMode(state, outputmode);
     setSourceOutputMode(outputmode, state);
 }
@@ -494,13 +498,17 @@ void DisplayMode::setSourceOutputMode(const char* outputmode, output_mode_state 
         if (cvbsMode) {
             pSysWrite->writeSysfs(SYSFS_DISPLAY_MODE, "null");
         }
+#if !defined(ODROIDN2)
         pSysWrite->writeSysfs(SYSFS_DISPLAY_MODE, outputmode);
+#endif
     } else {
         SYS_LOGI("cur display mode is equals to outputmode, Do not need set it\n");
     }
 
     //update free_scale_axis and window_axis
+#if !defined(ODROIDN2)
     updateFreeScaleAxis();
+#endif
     updateWindowAxis(outputmode);
 
     initHdrSdrMode();
@@ -1241,8 +1249,15 @@ void DisplayMode::updateDefaultUI() {
         /* FIXME: real 4K framebuffer is too slow, so using 1080p
          * fbset(3840, 2160, 32);
          */
-        mDisplayWidth = 1920;
-        mDisplayHeight = 1080;
+        mDisplayWidth = 3840;
+        mDisplayHeight = 2160;
+    } else if (!strncmp(mDefaultUI, "custombuilt", 11)) {
+        char value[64];
+        getBootEnv(UBOOTENV_CUSTOMWIDTH, value);
+        mDisplayWidth = atoi(value);
+        memset(value, strlen(value), '\0');
+        getBootEnv(UBOOTENV_CUSTOMHEIGHT, value);
+        mDisplayHeight = atoi(value);
     }
 #else
     if (!strncmp(mDefaultUI, "720", 3)) {
@@ -1346,118 +1361,8 @@ void DisplayMode::getPosition(const char* curMode, int *position) {
     int defaultWidth = 0;
     int defaultHeight = 0;
 #if defined(ODROIDN2)
-    strncpy(keyValue, curMode, strlen(curMode) - 4);
-    if (!strncmp(keyValue, "480x320", 7)) {
-        defaultWidth = 480;
-        defaultHeight = 320;
-    } else if (!strncmp(keyValue, "640x480", 7)) {
-        defaultWidth = 640;
-        defaultHeight = 480;
-    } else if (!strncmp(keyValue, "480", 3)) {
-        defaultWidth = 720;
-        defaultHeight = 480;
-    } else if (!strncmp(keyValue, "800x480", 7)) {
-        defaultWidth = 800;
-        defaultHeight = 480;
-    } else if (!strncmp(keyValue, "576", 3)) {
-        defaultWidth = 720;
-        mDisplayHeight = 576;
-    } else if (!strncmp(keyValue, "800x600", 7)) {
-        defaultWidth = 800;
-        defaultHeight = 600;
-    } else if (!strncmp(keyValue, "1024x600", 8)) {
-        defaultWidth = 1024;
-        defaultHeight = 600;
-    } else if (!strncmp(keyValue, "1024x768", 8)) {
-        defaultWidth = 1024;
-        defaultHeight = 768;
-    } else if (!strncmp(keyValue, "720", 3)) {
-        defaultWidth = 1280;
-        defaultHeight = 720;
-    } else if (!strncmp(keyValue, "1280x800", 8)) {
-        defaultWidth = 1280;
-        defaultHeight = 800;
-    } else if (!strncmp(keyValue, "1360x768", 8)) {
-        defaultWidth = 1360;
-        defaultHeight = 768;
-    } else if (!strncmp(keyValue, "1366x768", 8)) {
-        defaultWidth = 1366;
-        defaultHeight = 768;
-    } else if (!strncmp(keyValue, "1440x900", 8)) {
-        defaultWidth = 1440;
-        defaultHeight = 900;
-    } else if (!strncmp(keyValue, "1280x1024", 9)) {
-        defaultWidth = 1280;
-        defaultHeight = 1024;
-    } else if (!strncmp(keyValue, "1600x900", 8)) {
-        defaultWidth = 1600;
-        defaultHeight = 900;
-    } else if (!strncmp(keyValue, "1680x1050", 9)) {
-        defaultWidth = 1680;
-        defaultHeight = 1050;
-    } else if (!strncmp(keyValue, "1600x1200", 9)) {
-        defaultWidth = 1600;
-        defaultHeight = 1200;
-    } else if (!strncmp(keyValue, "1080", 4)) {
-        defaultWidth = 1920;
-        defaultHeight = 1080;
-    } else if (!strncmp(keyValue, "1920x1200", 9)) {
-        defaultWidth = 1920;
-        defaultHeight = 1200;
-    } else if (!strncmp(keyValue, "2560x1080", 9)) {
-        defaultWidth = 2560;
-        defaultHeight = 1080;
-    } else if (!strncmp(keyValue, "2560x1440", 9)) {
-        defaultWidth = 2560;
-        defaultHeight = 1440;
-    } else if (!strncmp(keyValue, "2560x1600", 9)) {
-        defaultWidth = 2560;
-        defaultHeight = 1600;
-    } else if (!strncmp(keyValue, "3440x1440", 9)) {
-        defaultWidth = 3440;
-        defaultHeight = 1440;
-    } else if (!strncmp(keyValue, "2160", 4)) {
-        defaultWidth = 3840;
-        defaultHeight = 2160;
-    }
-#else
-    if (strstr(curMode, "480")) {
-        strcpy(keyValue, strstr(curMode, MODE_480P_PREFIX) ? MODE_480P_PREFIX : MODE_480I_PREFIX);
-        defaultWidth = FULL_WIDTH_480;
-        defaultHeight = FULL_HEIGHT_480;
-    } else if (strstr(curMode, "576")) {
-        strcpy(keyValue, strstr(curMode, MODE_576P_PREFIX) ? MODE_576P_PREFIX : MODE_576I_PREFIX);
-        defaultWidth = FULL_WIDTH_576;
-        defaultHeight = FULL_HEIGHT_576;
-    } else if (strstr(curMode, MODE_720P_PREFIX)) {
-        strcpy(keyValue, MODE_720P_PREFIX);
-        defaultWidth = FULL_WIDTH_720;
-        defaultHeight = FULL_HEIGHT_720;
-    } else if (strstr(curMode, MODE_768P_PREFIX)) {
-        strcpy(keyValue, MODE_768P_PREFIX);
-        defaultWidth = FULL_WIDTH_768;
-        defaultHeight = FULL_HEIGHT_768;
-    } else if (strstr(curMode, MODE_1080I_PREFIX)) {
-        strcpy(keyValue, MODE_1080I_PREFIX);
-        defaultWidth = FULL_WIDTH_1080;
-        defaultHeight = FULL_HEIGHT_1080;
-    } else if (strstr(curMode, MODE_1080P_PREFIX)) {
-        strcpy(keyValue, MODE_1080P_PREFIX);
-        defaultWidth = FULL_WIDTH_1080;
-        defaultHeight = FULL_HEIGHT_1080;
-    } else if (strstr(curMode, MODE_4K2K_PREFIX)) {
-        strcpy(keyValue, MODE_4K2K_PREFIX);
-        defaultWidth = FULL_WIDTH_4K2K;
-        defaultHeight = FULL_HEIGHT_4K2K;
-    } else if (strstr(curMode, MODE_4K2KSMPTE_PREFIX)) {
-        strcpy(keyValue, "4k2ksmpte");
-        defaultWidth = FULL_WIDTH_4K2KSMPTE;
-        defaultHeight = FULL_HEIGHT_4K2KSMPTE;
-    } else {
-        strcpy(keyValue, MODE_1080P_PREFIX);
-        defaultWidth = FULL_WIDTH_1080;
-        defaultHeight = FULL_HEIGHT_1080;
-    }
+    defaultWidth = mDisplayWidth;
+    defaultHeight = mDisplayHeight;
 #endif
 
     mutex_lock(&mEnvLock);
