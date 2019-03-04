@@ -384,6 +384,7 @@ void DisplayMode::setSourceDisplay(output_mode_state state) {
     }
     SYS_LOGI("getBootEnv(%s, %s)", UBOOTENV_HDMIMODE, value);
     strcpy(outputmode, value);
+    strcpy(mDefaultUI, value);
 #endif
 
     SYS_LOGI("display sink type:%d [0:none, 1:sink, 2:repeater], old outputmode:%s, new outputmode:%s\n",
@@ -1167,6 +1168,7 @@ void DisplayMode::setAutoSwitchFrameRate(int state) {
 
 void DisplayMode::updateDefaultUI() {
 #if defined(ODROIDN2)
+    SYS_LOGI("%s, mDefaultUI = %s", __func__, mDefaultUI);
     if (!strncmp(mDefaultUI, "480x320", 7)) {
         mDisplayWidth = 480;
         mDisplayHeight = 320;
@@ -1243,6 +1245,17 @@ void DisplayMode::updateDefaultUI() {
          */
         mDisplayWidth = 1920;
         mDisplayHeight = 1080;
+    } else if (!strncmp(mDefaultUI, "custombuilt", 11)) {
+        char value[64];
+        getBootEnv(UBOOTENV_CUSTOMWIDTH, value);
+        mDisplayWidth = atoi(value);
+        memset(value, strlen(value), '\0');
+        getBootEnv(UBOOTENV_CUSTOMHEIGHT, value);
+        mDisplayHeight = atoi(value);
+        if (mDisplayWidth == 3840)
+            mDisplayWidth = 1920;
+        if (mDisplayHeight == 2150)
+            mDisplayHeight = 1080;
     }
 #else
     if (!strncmp(mDefaultUI, "720", 3)) {
@@ -1319,6 +1332,7 @@ void DisplayMode::updateFreeScaleAxis() {
     char axis[MAX_STR_LEN] = {0};
     sprintf(axis, "%d %d %d %d",
             0, 0, mDisplayWidth - 1, mDisplayHeight - 1);
+    SYS_LOGI("%s %s", __func__, axis);
     pSysWrite->writeSysfs(DISPLAY_FB0_FREESCALE_AXIS, axis);
 }
 
@@ -1328,6 +1342,7 @@ void DisplayMode::updateWindowAxis(const char* outputmode) {
     getPosition(outputmode, position);
     sprintf(axis, "%d %d %d %d",
             position[0], position[1], position[0] + position[2] - 1, position[1] + position[3] -1);
+    SYS_LOGI("%s %s", __func__, axis);
     pSysWrite->writeSysfs(DISPLAY_FB0_WINDOW_AXIS, axis);
 }
 
@@ -1346,8 +1361,12 @@ void DisplayMode::getPosition(const char* curMode, int *position) {
     int defaultWidth = 0;
     int defaultHeight = 0;
 #if defined(ODROIDN2)
+    //SYS_LOGI("%s %s", __func__, curMode);
     strncpy(keyValue, curMode, strlen(curMode) - 4);
-    if (!strncmp(keyValue, "480x320", 7)) {
+    if (!strcmp(curMode, "custombuilt")) {
+        defaultWidth = mDisplayWidth;
+        defaultHeight = mDisplayHeight;
+    } else if (!strncmp(keyValue, "480x320", 7)) {
         defaultWidth = 480;
         defaultHeight = 320;
     } else if (!strncmp(keyValue, "640x480", 7)) {

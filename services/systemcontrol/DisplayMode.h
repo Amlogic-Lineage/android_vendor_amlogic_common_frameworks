@@ -250,6 +250,8 @@ using namespace android;
 
 #define UBOOTENV_REBOOT_MODE           "ubootenv.var.reboot_mode_android"
 
+#define UBOOTENV_CUSTOMWIDTH            "ubootenv.var.customwidth"
+#define UBOOTENV_CUSTOMHEIGHT           "ubootenv.var.customheight"
 
 #define FULL_WIDTH_480                  720
 #define FULL_HEIGHT_480                 480
