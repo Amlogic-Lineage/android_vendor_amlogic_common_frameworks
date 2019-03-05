@@ -1254,7 +1254,7 @@ void DisplayMode::updateDefaultUI() {
         mDisplayHeight = atoi(value);
         if (mDisplayWidth == 3840)
             mDisplayWidth = 1920;
-        if (mDisplayHeight == 2150)
+        if (mDisplayHeight == 2160)
             mDisplayHeight = 1080;
     }
 #else
