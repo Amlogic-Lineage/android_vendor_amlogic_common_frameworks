@@ -1380,7 +1380,7 @@ void DisplayMode::getPosition(const char* curMode, int *position) {
         defaultHeight = 480;
     } else if (!strncmp(keyValue, "576", 3)) {
         defaultWidth = 720;
-        mDisplayHeight = 576;
+        defaultHeight = 576;
     } else if (!strncmp(keyValue, "800x600", 7)) {
         defaultWidth = 800;
         defaultHeight = 600;
