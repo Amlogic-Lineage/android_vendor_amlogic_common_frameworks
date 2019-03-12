@@ -378,8 +378,10 @@ void DisplayMode::setSourceDisplay(output_mode_state state) {
 
 #if defined(ODROIDN2)
     char value[64];
+    char cvbs_buf[64];
     getBootEnv(UBOOTENV_CVBSCABLE, value);
-    if (strcmp(value, "1") == 0) {
+    getBootEnv(UBOOTENV_CVBSMODE, cvbs_buf);
+    if (strcmp(value, "1") == 0 && strlen(cvbs_buf) >= 7) {
         getBootEnv(UBOOTENV_CVBSMODE, value);
         SYS_LOGI("getBootEnv(%s, %s)", UBOOTENV_CVBSMODE, value);
     } else {
