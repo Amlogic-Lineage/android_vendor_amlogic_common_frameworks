@@ -378,11 +378,17 @@ void DisplayMode::setSourceDisplay(output_mode_state state) {
 
 #if defined(ODROIDN2)
     char value[64];
-    getBootEnv(UBOOTENV_HDMIMODE, value);
-    if (strlen(value) == 0) {
-        strcpy(value, "1080p60hz");
+    getBootEnv(UBOOTENV_CVBSCABLE, value);
+    if (strcmp(value, "1") == 0) {
+        getBootEnv(UBOOTENV_CVBSMODE, value);
+        SYS_LOGI("getBootEnv(%s, %s)", UBOOTENV_CVBSMODE, value);
+    } else {
+        getBootEnv(UBOOTENV_HDMIMODE, value);
+        if (strlen(value) == 0) {
+            strcpy(value, "1080p60hz");
+        }
+        SYS_LOGI("getBootEnv(%s, %s)", UBOOTENV_HDMIMODE, value);
     }
-    SYS_LOGI("getBootEnv(%s, %s)", UBOOTENV_HDMIMODE, value);
     strcpy(outputmode, value);
     strcpy(mDefaultUI, value);
 #endif
