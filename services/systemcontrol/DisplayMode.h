@@ -513,6 +513,11 @@ private:
 #ifndef RECOVERY_MODE
     sp<SystemControlNotify> mNotifyListener;
 #endif
+    // Position Values
+    char mLeft[16];
+    char mTop[16];
+    char mWidth[16];
+    char mHeight[16];
 };
 
 #endif // ANDROID_DISPLAY_MODE_H

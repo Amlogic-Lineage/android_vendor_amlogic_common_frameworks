@@ -192,6 +192,11 @@ DisplayMode::DisplayMode(const char *path, Ubootenv *ubootenv)
 
     SYS_LOGI("display mode config path: %s", pConfigPath);
     pSysWrite = new SysWrite();
+
+    memset(mLeft, strlen(mLeft), '\0');
+    memset(mTop, strlen(mTop), '\0');
+    memset(mWidth, strlen(mWidth), '\0');
+    memset(mHeight, strlen(mHeight), '\0');
 }
 
 DisplayMode::~DisplayMode() {
@@ -1488,62 +1493,31 @@ void DisplayMode::getPosition(const char* curMode, int *position) {
 #endif
 
     mutex_lock(&mEnvLock);
-    sprintf(ubootvar, "ubootenv.var.%s_x", keyValue);
-    position[0] = getBootenvInt(ubootvar, 0);
-    sprintf(ubootvar, "ubootenv.var.%s_y", keyValue);
-    position[1] = getBootenvInt(ubootvar, 0);
-    sprintf(ubootvar, "ubootenv.var.%s_w", keyValue);
-    position[2] = getBootenvInt(ubootvar, defaultWidth);
-    sprintf(ubootvar, "ubootenv.var.%s_h", keyValue);
-    position[3] = getBootenvInt(ubootvar, defaultHeight);
+    {
+        int width = defaultWidth;
+        int height = defaultHeight;
+
+        if (atoi(mWidth))
+            width = atoi(mWidth);
+        if (atoi(mHeight))
+            height = atoi(mHeight);
+
+        position[0] = atoi(mLeft);
+        position[1] = atoi(mTop);
+        position[2] = width;
+        position[3] = height;
+    }
     mutex_unlock(&mEnvLock);
 
 }
 
 void DisplayMode::setPosition(int left, int top, int width, int height) {
-    char x[512] = {0};
-    char y[512] = {0};
-    char w[512] = {0};
-    char h[512] = {0};
-    sprintf(x, "%d", left);
-    sprintf(y, "%d", top);
-    sprintf(w, "%d", width);
-    sprintf(h, "%d", height);
-
-    char curMode[MODE_LEN] = {0};
-    pSysWrite->readSysfs(SYSFS_DISPLAY_MODE, curMode);
-
-    char keyValue[20] = {0};
-    char ubootvar[100] = {0};
-    if (strstr(curMode, "480")) {
-        strcpy(keyValue, strstr(curMode, MODE_480P_PREFIX) ? MODE_480P_PREFIX : MODE_480I_PREFIX);
-    } else if (strstr(curMode, "576")) {
-        strcpy(keyValue, strstr(curMode, MODE_576P_PREFIX) ? MODE_576P_PREFIX : MODE_576I_PREFIX);
-    } else if (strstr(curMode, MODE_720P_PREFIX)) {
-        strcpy(keyValue, MODE_720P_PREFIX);
-    } else if (strstr(curMode, MODE_768P_PREFIX)) {
-        strcpy(keyValue, MODE_768P_PREFIX);
-    } else if (strstr(curMode, MODE_1080I_PREFIX)) {
-        strcpy(keyValue, MODE_1080I_PREFIX);
-    } else if (strstr(curMode, MODE_1080P_PREFIX)) {
-        strcpy(keyValue, MODE_1080P_PREFIX);
-    } else if (strstr(curMode, MODE_4K2K_PREFIX)) {
-        strcpy(keyValue, MODE_4K2K_PREFIX);
-    } else if (strstr(curMode, MODE_4K2KSMPTE_PREFIX)) {
-        strcpy(keyValue, "4k2ksmpte");
-    }
-
     mutex_lock(&mEnvLock);
-    sprintf(ubootvar, "ubootenv.var.%s_x", keyValue);
-    setBootEnv(ubootvar, x);
-    sprintf(ubootvar, "ubootenv.var.%s_y", keyValue);
-    setBootEnv(ubootvar, y);
-    sprintf(ubootvar, "ubootenv.var.%s_w", keyValue);
-    setBootEnv(ubootvar, w);
-    sprintf(ubootvar, "ubootenv.var.%s_h", keyValue);
-    setBootEnv(ubootvar, h);
+    sprintf(mLeft, "%d", left);
+    sprintf(mTop, "%d", top);
+    sprintf(mWidth, "%d", width);
+    sprintf(mHeight, "%d", height);
     mutex_unlock(&mEnvLock);
-
 }
 
 void DisplayMode::saveDeepColorAttr(const char* mode, const char* dcValue) {
