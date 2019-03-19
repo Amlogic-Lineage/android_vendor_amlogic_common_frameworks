@@ -74,6 +74,9 @@ private:
     int propertyList(void (*propfn)(const char *key, const char *value, void *cookie), void *cookie);
     void propertyLoad();
 
+#if defined(ODROIDN2)
+    char* getValueFromBootini(const char * key);
+#endif
     char mEnvPartitionName[32];
     int mEnvPartitionSize;
     int mEnvSize;

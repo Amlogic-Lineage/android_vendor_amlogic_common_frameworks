@@ -47,6 +47,26 @@ Ubootenv *Ubootenv::getInstance() {
 	}
 	return ubootenv;
 }
+
+struct {
+	const char *value;
+} bootini[] = {
+	"colorattribute",
+};
+
+int isBootiniValue(const char *key) {
+	int i;
+
+	if (*key ==0)
+		return 0;
+
+	for (i=0; i< sizeof(bootini) / sizeof (bootini[0]); i++) {
+		if(!strcmp(key, bootini[i].value))
+			return 1;
+	}
+
+	return 0;
+}
 #endif
 
 Ubootenv::Ubootenv() :
@@ -207,6 +227,11 @@ char * Ubootenv::get(const char * key)
 		SYS_LOGE("[ubootenv] don't init done\n");
 		return NULL;
 	}
+#if defined(ODROIDN2)
+	if (isBootiniValue(key)) {
+		return getValueFromBootini(key);
+	}
+#endif
 
 	env_attribute *attr = &mEnvAttrHeader;
 	while (attr) {
@@ -217,6 +242,34 @@ char * Ubootenv::get(const char * key)
 	}
 	return NULL;
 }
+
+#if defined(ODROIDN2)
+char * Ubootenv::getValueFromBootini(const char * key) {
+	FILE *fp = fopen("/odm/boot.ini", "r");
+	char str[255];
+	char value[10];
+
+	if (fp == NULL) {
+		SYS_LOGE("[ubootenv] failed to access (%s)\n", strerror(errno));
+		return 0;
+	}
+
+	while (fgets(str, 255, fp) != NULL) {
+		char *token = strtok(str, " ");
+		if (strcmp(token, "setenv"))
+			continue;
+		token = strtok(NULL, " ");
+		if (!strcmp(token, key)) {
+			char *p = strtok(NULL, "\"");
+			sscanf(p, "%s", value);
+			break;
+		}
+	}
+	fclose (fp);
+	SYS_LOGE("[ubootenv] value - %s\n", value);
+	return value;
+}
+#endif
 
 int Ubootenv::set(const char * key,  const char * value, bool createNew)
 {
