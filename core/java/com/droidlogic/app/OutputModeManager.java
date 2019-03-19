@@ -231,7 +231,6 @@ public class OutputModeManager {
     private String DEFAULT_OUTPUT_MODE                      = "720p60hz";
     private String DEFAULT_COLOR_ATTRIBUTE                  = "444,8bit";
 
-    private static String currentColorAttribute = null;
     private static String currentOutputmode = null;
     private boolean ifModeSetting = false;
     private final Context mContext;

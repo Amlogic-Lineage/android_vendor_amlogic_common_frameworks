@@ -194,6 +194,9 @@ bool FormatColorDepth::isModeSupportDeepColorAttr(const char *mode, const char *
     char outputmode[MODE_LEN] = {0};
     strcpy(outputmode, mode);
     strcat(outputmode, color);
+    // custombuilt mode avoid the routine.
+    if(!strcmp(mode, "custombuilt"))
+        return true;
     //try support or not
     mSysWrite.writeSysfs(DISPLAY_HDMI_VALID_MODE, outputmode);
     mSysWrite.readSysfs(DISPLAY_HDMI_VALID_MODE, valueStr);
