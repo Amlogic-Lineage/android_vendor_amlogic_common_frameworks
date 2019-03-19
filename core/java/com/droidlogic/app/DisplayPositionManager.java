@@ -117,6 +117,13 @@ public class DisplayPositionManager {
     }
 
     private void initStep(String mode) {
+        String prop = mSystenControl.getPropertyString("vendor.display-size", "1920x1080");
+        Log.e(TAG, "initStep " + prop);
+        String[] resolutions = prop.split("x");
+        mMaxRight = Integer.parseInt(resolutions[0]) - 1;
+        mMaxBottom = Integer.parseInt(resolutions[1]) - 1;
+        Log.e(TAG, "mMaxRight = " + mMaxRight + ", mMaxBottom = " + mMaxBottom);
+        /*
         if (mode.contains(OutputModeManager.HDMI_480)) {
             mMaxRight = 719;
             mMaxBottom = 479;
@@ -139,6 +146,7 @@ public class DisplayPositionManager {
             mMaxRight = 1919;
             mMaxBottom = 1079;
         }
+        */
     }
 
     public void zoomByPercent(int percent){
