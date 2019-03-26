@@ -74,8 +74,6 @@ Ubootenv::Ubootenv() :
 	mEnvLock(PTHREAD_MUTEX_INITIALIZER)
 {
 	init();
-
-	printValues();
 }
 
 Ubootenv::~Ubootenv()
@@ -98,23 +96,54 @@ Ubootenv::~Ubootenv()
 
 int Ubootenv::updateValue(const char* name, const char* value)
 {
-	SYS_LOGI("[ubootenv] -- %s (%d) is not implemented\n", __func__, __LINE__);
+	if (!mEnvInitDone) {
+		SYS_LOGE("[ubootenv] bootenv do not init\n");
+		return -1;
+	}
+
+	SYS_LOGI("[ubootenv] update value [%s : %s] \n", name, value);
+	const char* envName = NULL;
+	if (strcmp(name, "ubootenv.var.bootcmd") == 0) {
+		envName = "bootcmd";
+	}
+	else {
+		if (!isEnv(name)) {
+			//should assert here.
+			SYS_LOGE("[ubootenv] %s is not a ubootenv variable.\n", name);
+			return -2;
+		}
+		envName = name + strlen(PROFIX_UBOOTENV_VAR);
+	}
+
+	const char *envValue = get(envName);
+	if (!envValue)
+		envValue = "";
+
+	if (!strcmp(value, envValue))
+		return 0;
+
+	mutex_lock(&mEnvLock);
+
+	set(envName, value, true);
+	save();
+
+	mutex_unlock(&mEnvLock);
 	return 0;
 }
 
 const char * Ubootenv::getValue(const char * key)
 {
-    if (!isEnv(key)) {
-        //should assert here.
-        SYS_LOGE("[ubootenv] %s is not a ubootenv varible.\n", key);
-        return NULL;
-    }
+	if (!isEnv(key)) {
+		//should assert here.
+		SYS_LOGE("[ubootenv] %s is not a ubootenv varible.\n", key);
+		return NULL;
+	}
 
-    mutex_lock(&mEnvLock);
-    const char* envName = key + strlen(PROFIX_UBOOTENV_VAR);
-    const char* envValue = get(envName);
-    mutex_unlock(&mEnvLock);
-    return envValue;
+	mutex_lock(&mEnvLock);
+	const char* envName = key + strlen(PROFIX_UBOOTENV_VAR);
+	const char* envValue = get(envName);
+	mutex_unlock(&mEnvLock);
+	return envValue;
 }
 
 void Ubootenv::printValues()
@@ -273,7 +302,26 @@ char * Ubootenv::getValueFromBootini(const char * key) {
 
 int Ubootenv::set(const char * key,  const char * value, bool createNew)
 {
-	SYS_LOGI("[ubootenv] -- %s (%d) is not implemented\n", __func__, __LINE__);
+	env_attribute *attr = &mEnvAttrHeader;
+	env_attribute *last = attr;
+	while (attr) {
+		if(!strcmp(key, attr->key)) {
+			strcpy(attr->value, value);
+			return 2;
+		}
+		last = attr;
+		attr = attr->next;
+	}
+	if (createNew) {
+		SYS_LOGV("[ubootenv] ubootenv.var.%s not found, create it.\n", key);
+
+		attr = (env_attribute *)malloc(sizeof(env_attribute));
+		last->next = attr;
+		memset(attr, 0, sizeof(env_attribute));
+		strcpy(attr->key, key);
+		strcpy(attr->value, value);
+		return 1;
+	}
 	return 0;
 }
 
