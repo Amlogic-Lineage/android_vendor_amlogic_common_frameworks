@@ -864,7 +864,7 @@ void DisplayMode::filterHdmiMode(char* mode, hdmi_data_t* data) {
         #endif
     }
     //old mode is not support in this TV, so switch to best mode.
-#ifdef USE_BEST_MODE
+#if defined(USE_BEST_MODE)&&!defined(ODROIDN2)
     getBestHdmiMode(mode, data);
 #else
     getHighestHdmiMode(mode, data);
@@ -885,7 +885,7 @@ void DisplayMode::getHdmiOutputMode(char* mode, hdmi_data_t* data) {
 
     if (pSysWrite->getPropertyBoolean(PROP_HDMIONLY, true)) {
         if (isBestOutputmode()) {
-        #ifdef USE_BEST_MODE
+        #if defined(USE_BEST_MODE)&&!defined(ODROIDN2)
             getBestHdmiMode(mode, data);
         #else
             getHighestHdmiMode(mode, data);
@@ -1104,11 +1104,16 @@ bool DisplayMode::isEdidChange() {
 }
 
 bool DisplayMode::isBestOutputmode() {
+#if defined(ODROIDN2)
+    //ODROID-N2 doesn't use best output mode.
+    return false;
+#else
     char isBestMode[MODE_LEN] = {0};
     if (DISPLAY_TYPE_TV == mDisplayType) {
         return false;
     }
     return !getBootEnv(UBOOTENV_ISBESTMODE, isBestMode) || strcmp(isBestMode, "true") == 0;
+#endif
 }
 
 void DisplayMode::setSinkOutputMode(const char* outputmode) {

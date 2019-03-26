@@ -58,7 +58,9 @@ private:
     bool getBootEnv(const char* key, char* value);
 
     Ubootenv *mUbootenv;
+#if !defined(ODROIDN2)
     void getProperHdmiColorArrtibute(const char * outputmode, char * colorAttribute);
+#endif
     bool initColorAttribute(char* supportedColorList, int len);
 
     SysWrite mSysWrite;
