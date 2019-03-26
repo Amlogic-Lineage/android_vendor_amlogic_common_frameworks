@@ -33,7 +33,11 @@ int main(int argc, char** argv)
         path = argv[1];
     }
 
+#if defined(ODROIDN2)
+    Ubootenv *pUbootenv = Ubootenv::getInstance();
+#else
     Ubootenv *pUbootenv = new Ubootenv();
+#endif
     SysWrite *pSysWrite = new SysWrite();
 
     DisplayMode displayMode(path, pUbootenv);

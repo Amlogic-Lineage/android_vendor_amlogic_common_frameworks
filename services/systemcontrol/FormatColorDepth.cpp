@@ -60,7 +60,11 @@ static const char* COLOR_ATTRIBUTE_LIST2[] = {
 };
 
 FormatColorDepth::FormatColorDepth() {
+#if defined(ODROIDN2)
+    mUbootenv = Ubootenv::getInstance();
+#else
     mUbootenv = new Ubootenv();
+#endif
 }
 
 FormatColorDepth::~FormatColorDepth() {

@@ -39,6 +39,15 @@ const char *env_key_quirk(const char *key)
 	}
 	return key;
 }
+#if defined(ODROIDN2)
+Ubootenv *Ubootenv::ubootenv = NULL;
+Ubootenv *Ubootenv::getInstance() {
+	if (ubootenv == NULL) {
+		ubootenv = new Ubootenv();
+	}
+	return ubootenv;
+}
+#endif
 
 Ubootenv::Ubootenv() :
 	mEnvInitDone(false),

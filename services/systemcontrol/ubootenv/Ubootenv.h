@@ -43,7 +43,11 @@ struct callback_data {
 
 class Ubootenv {
 public:
+#if defined(ODROIDN2)
+    static Ubootenv *getInstance();
+#else
     Ubootenv();
+#endif
     ~Ubootenv();
 
     int reInit();
@@ -52,6 +56,10 @@ public:
     void printValues();
 
 private:
+#if defined(ODROIDN2)
+    static Ubootenv *ubootenv;
+    Ubootenv();
+#endif
     int init();
     int readPartitionData();
     env_attribute* parseAttribute();

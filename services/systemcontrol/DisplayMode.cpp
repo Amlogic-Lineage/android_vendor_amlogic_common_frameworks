@@ -186,7 +186,11 @@ DisplayMode::DisplayMode(const char *path, Ubootenv *ubootenv)
     }
 
     if (NULL == ubootenv)
+#if defined(ODROIDN2)
+        mUbootenv = Ubootenv::getInstance();
+#else
         mUbootenv = new Ubootenv();
+#endif
     else
         mUbootenv = ubootenv;
 
