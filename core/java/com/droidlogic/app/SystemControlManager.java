@@ -462,6 +462,8 @@ public class SystemControlManager {
                                     resultVal.value = v;
                                 }
                             });
+                if (resultVal.value == null)
+                    return def;
                 return resultVal.value;
             } catch (RemoteException e) {
                 Log.e(TAG, "getBootenv:" + e);
