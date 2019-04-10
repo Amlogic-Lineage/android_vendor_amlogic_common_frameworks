@@ -255,6 +255,8 @@ using namespace android;
 #define UBOOTENV_CUSTOMWIDTH            "ubootenv.var.customwidth"
 #define UBOOTENV_CUSTOMHEIGHT           "ubootenv.var.customheight"
 
+#define UBOOTENV_SDR2HDR               "ubootenv.var.sdr2hdr"
+
 #define FULL_WIDTH_480                  720
 #define FULL_HEIGHT_480                 480
 #define FULL_WIDTH_576                  720
