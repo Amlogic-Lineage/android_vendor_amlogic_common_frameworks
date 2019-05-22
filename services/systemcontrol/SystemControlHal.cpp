@@ -156,7 +156,7 @@ Return<void> SystemControlHal::getPropertyLong(const hidl_string &key, int64_t d
     int64_t value = mSysControl->getPropertyLong(key, def);
 
     if (ENABLE_LOG_PRINT)
-        ALOGI("getPropertyLong key :%s, value:%ld", key.c_str(), value);
+        ALOGI("getPropertyLong key :%s, value:%lld", key.c_str(), value);
     _hidl_cb(Result::OK, value);
     return Void();
 }
