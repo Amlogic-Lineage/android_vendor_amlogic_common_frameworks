@@ -186,7 +186,7 @@ DisplayMode::DisplayMode(const char *path, Ubootenv *ubootenv)
     }
 
     if (NULL == ubootenv)
-#if defined(ODROIDN2)
+#if defined(ODROID)
         mUbootenv = Ubootenv::getInstance();
 #else
         mUbootenv = new Ubootenv();
@@ -385,7 +385,7 @@ void DisplayMode::setSourceDisplay(output_mode_state state) {
         pSysWrite->writeSysfs(H265_DOUBLE_WRITE_MODE, "0");
     }
 
-#if defined(ODROIDN2)
+#if defined(ODROID)
     char value[64];
     char cvbs_buf[64];
     getBootEnv(UBOOTENV_CVBSCABLE, value);
@@ -864,7 +864,7 @@ void DisplayMode::filterHdmiMode(char* mode, hdmi_data_t* data) {
         #endif
     }
     //old mode is not support in this TV, so switch to best mode.
-#if defined(USE_BEST_MODE)&&!defined(ODROIDN2)
+#if defined(USE_BEST_MODE)&&!defined(ODROID)
     getBestHdmiMode(mode, data);
 #else
     getHighestHdmiMode(mode, data);
@@ -885,7 +885,7 @@ void DisplayMode::getHdmiOutputMode(char* mode, hdmi_data_t* data) {
 
     if (pSysWrite->getPropertyBoolean(PROP_HDMIONLY, true)) {
         if (isBestOutputmode()) {
-        #if defined(USE_BEST_MODE)&&!defined(ODROIDN2)
+        #if defined(USE_BEST_MODE)&&!defined(ODROID)
             getBestHdmiMode(mode, data);
         #else
             getHighestHdmiMode(mode, data);
@@ -1104,8 +1104,8 @@ bool DisplayMode::isEdidChange() {
 }
 
 bool DisplayMode::isBestOutputmode() {
-#if defined(ODROIDN2)
-    //ODROID-N2 doesn't use best output mode.
+#if defined(ODROID)
+    //ODROID doesn't use best output mode.
     return false;
 #else
     char isBestMode[MODE_LEN] = {0};
@@ -1189,7 +1189,7 @@ void DisplayMode::setAutoSwitchFrameRate(int state) {
 }
 
 void DisplayMode::updateDefaultUI() {
-#if defined(ODROIDN2)
+#if defined(ODROID)
     SYS_LOGI("%s, mDefaultUI = %s", __func__, mDefaultUI);
     if (!strncmp(mDefaultUI, "480x320", 7)) {
         mDisplayWidth = 480;
@@ -1382,7 +1382,7 @@ void DisplayMode::getPosition(const char* curMode, int *position) {
     char ubootvar[100] = {0};
     int defaultWidth = 0;
     int defaultHeight = 0;
-#if defined(ODROIDN2)
+#if defined(ODROID)
     //SYS_LOGI("%s %s", __func__, curMode);
     strncpy(keyValue, curMode, strlen(curMode) - 4);
     if (!strcmp(curMode, "custombuilt")) {

@@ -43,7 +43,7 @@ struct callback_data {
 
 class Ubootenv {
 public:
-#if defined(ODROIDN2)
+#if defined(ODROID)
     static Ubootenv *getInstance();
 #else
     Ubootenv();
@@ -56,7 +56,7 @@ public:
     void printValues();
 
 private:
-#if defined(ODROIDN2)
+#if defined(ODROID)
     static Ubootenv *ubootenv;
     Ubootenv();
 #endif
@@ -74,7 +74,7 @@ private:
     int propertyList(void (*propfn)(const char *key, const char *value, void *cookie), void *cookie);
     void propertyLoad();
 
-#if defined(ODROIDN2)
+#if defined(ODROID)
     char* getValueFromBootini(const char * key);
 #endif
     char mEnvPartitionName[32];
@@ -84,7 +84,7 @@ private:
     environment_t mEnvData;
     env_attribute_t mEnvAttrHeader;
 
-#if defined(ODROIDN2)
+#if defined(ODROID)
     pthread_mutex_t mEnvLock;
 #else
     mutex_t mEnvLock;
@@ -92,7 +92,7 @@ private:
     bool mEnvInitDone;
 };
 
-#if defined(ODROIDN2)
+#if defined(ODROID)
 #define mutex_lock(x)		pthread_mutex_lock(x)
 #define mutex_unlock(x)		pthread_mutex_unlock(x)
 #else

@@ -59,7 +59,7 @@ SystemControl* SystemControl::instantiate(const char *cfgpath) {
 SystemControl::SystemControl(const char *path)
     : mLogLevel(LOG_LEVEL_DEFAULT) {
 
-#if defined(ODROIDN2)
+#if defined(ODROID)
     pUbootenv = Ubootenv::getInstance();
 #else
     pUbootenv = new Ubootenv();
