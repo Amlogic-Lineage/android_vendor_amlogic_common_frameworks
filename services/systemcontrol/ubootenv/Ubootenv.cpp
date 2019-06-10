@@ -21,7 +21,7 @@
 #include <stdint.h>
 #include <zlib.h>
 
-#if defined(ODROIDN2)
+#if defined(ODROID)
 #include "Ubootenv-odroid.cpp"
 #else
 

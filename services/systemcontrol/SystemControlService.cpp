@@ -55,7 +55,7 @@ SystemControlService::SystemControlService(const char *path)
 
     ALOGI("SystemControlService instantiate begin");
 
-#if defined(ODROIDN2)
+#if defined(ODROID)
     pUbootenv = Ubootenv::getInstance();
 #else
     pUbootenv = new Ubootenv();

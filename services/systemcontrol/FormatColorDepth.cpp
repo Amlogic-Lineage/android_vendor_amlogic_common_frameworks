@@ -85,7 +85,7 @@ static const char* COLOR_ATTRIBUTE_LIST4[] = {
 };
 
 FormatColorDepth::FormatColorDepth() {
-#if defined(ODROIDN2)
+#if defined(ODROID)
     mUbootenv = Ubootenv::getInstance();
 #else
     mUbootenv = new Ubootenv();
@@ -137,7 +137,7 @@ void FormatColorDepth::getHdmiColorAttribute(const char* outputmode, char* color
     }
 
     if (mSysWrite.getPropertyBoolean(PROP_HDMIONLY, true)) {
-#if defined(ODROIDN2)
+#if defined(ODROID)
         SYS_LOGI("Only modify deep color mode, get colorAttr from ubootenv.var.colorattribute\n");
         getBootEnv(UBOOTENV_COLORATTRIBUTE, colorAttribute);
 #else
@@ -161,7 +161,7 @@ void FormatColorDepth::getHdmiColorAttribute(const char* outputmode, char* color
         colorAttribute, outputmode, supportedColorList);
 }
 
-#if !defined(ODROIDN2)
+#if !defined(ODROID)
 void FormatColorDepth::getProperHdmiColorArrtibute(const char* outputmode, char* colorAttribute) {
     char ubootvar[MODE_LEN] = {0};
     char tmpValue[MODE_LEN] = {0};

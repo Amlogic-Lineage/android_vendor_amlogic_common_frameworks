@@ -39,7 +39,7 @@ const char *env_key_quirk(const char *key)
 	}
 	return key;
 }
-#if defined(ODROIDN2)
+#if defined(ODROID)
 Ubootenv *Ubootenv::ubootenv = NULL;
 Ubootenv *Ubootenv::getInstance() {
 	if (ubootenv == NULL) {
@@ -256,7 +256,7 @@ char * Ubootenv::get(const char * key)
 		SYS_LOGE("[ubootenv] don't init done\n");
 		return NULL;
 	}
-#if defined(ODROIDN2)
+#if defined(ODROID)
 	if (isBootiniValue(key)) {
 		return getValueFromBootini(key);
 	}
@@ -272,7 +272,7 @@ char * Ubootenv::get(const char * key)
 	return NULL;
 }
 
-#if defined(ODROIDN2)
+#if defined(ODROID)
 char * Ubootenv::getValueFromBootini(const char * key) {
 	FILE *fp = fopen("/odm/boot.ini", "r");
 	char str[255];
