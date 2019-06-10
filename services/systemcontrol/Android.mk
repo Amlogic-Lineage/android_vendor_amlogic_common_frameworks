@@ -85,7 +85,7 @@ LOCAL_SRC_FILES:= \
   VtsHalHidlTargetTestBase.cpp \
   VtsHalHidlTargetTestEnvBase.cpp
 
-ifeq ($(TARGET_PRODUCT), odroidc4)
+ifeq ($(PRODUCT_BRAND), ODROID)
 LOCAL_SRC_FILES += \
   ubootenv/Ubootenv-odroid.cpp
 else
@@ -93,7 +93,7 @@ LOCAL_SRC_FILES += \
   ubootenv/Ubootenv-odroid.cpp
 endif
 
-ifeq ($(TARGET_PRODUCT), odroidc4)
+ifeq ($(PRODUCT_BRAND), ODROID)
 LOCAL_CFLAGS += -DODROID
 endif
 
@@ -178,7 +178,7 @@ LOCAL_SRC_FILES:= \
   FrameRateAutoAdaption.cpp \
   FormatColorDepth.cpp
 
-ifeq ($(TARGET_PRODUCT), odroidc4)
+ifeq ($(PRODUCT_BRAND), ODROID)
 LOCAL_SRC_FILES += \
   ubootenv/Ubootenv-odroid.cpp
 else
@@ -186,7 +186,7 @@ LOCAL_SRC_FILES += \
   ubootenv/Ubootenv.cpp
 endif
 
-ifeq ($(TARGET_PRODUCT), odroidc4)
+ifeq ($(PRODUCT_BRAND), ODROID)
 LOCAL_CFLAGS += -DODROID
 endif
 
