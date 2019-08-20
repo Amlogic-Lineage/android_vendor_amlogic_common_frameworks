@@ -176,7 +176,8 @@ DisplayMode::DisplayMode(const char *path, Ubootenv *ubootenv)
     :mDisplayType(DISPLAY_TYPE_MBOX),
     mDisplayWidth(FULL_WIDTH_1080),
     mDisplayHeight(FULL_HEIGHT_1080),
-    mLogLevel(LOG_LEVEL_DEFAULT) {
+    mLogLevel(LOG_LEVEL_DEFAULT),
+    mEnvLock(PTHREAD_MUTEX_INITIALIZER) {
 
     if (NULL == path) {
         pConfigPath = DISPLAY_CFG_FILE;
