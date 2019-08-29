@@ -1238,9 +1238,11 @@ void DisplayMode::updateDefaultUI() {
         char value[64];
         getBootEnv(UBOOTENV_CUSTOMWIDTH, value);
         mDisplayWidth = atoi(value);
+        SYS_LOGD("%s custombuilt mDisplayWidth = %d", __func__, mDisplayWidth);
         memset(value, strlen(value), '\0');
         getBootEnv(UBOOTENV_CUSTOMHEIGHT, value);
         mDisplayHeight = atoi(value);
+        SYS_LOGD("%s custombuilt mDisplayHeight = %d", __func__, mDisplayHeight);
         if (mDisplayWidth == 3840)
             mDisplayWidth = 1920;
         if (mDisplayHeight == 2160)
@@ -1350,8 +1352,13 @@ void DisplayMode::getPosition(const char* curMode, int *position) {
     int defaultWidth = 0;
     int defaultHeight = 0;
 #if defined(ODROID)
-    //SYS_LOGI("%s %s", __func__, curMode);
-    strncpy(keyValue, curMode, strlen(curMode) - 4);
+    if (curMode == NULL || strlen(curMode) == 0) {
+        strcpy(keyValue, "1080");
+    } else {
+        //SYS_LOGI("%s %s", __func__, curMode);
+        strncpy(keyValue, curMode, strlen(curMode) - 4);
+    }
+
     if (!strcmp(curMode, "custombuilt")) {
         defaultWidth = mDisplayWidth;
         defaultHeight = mDisplayHeight;
