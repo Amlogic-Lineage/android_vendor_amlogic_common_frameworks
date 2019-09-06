@@ -198,10 +198,10 @@ DisplayMode::DisplayMode(const char *path, Ubootenv *ubootenv)
     SYS_LOGI("display mode config path: %s", pConfigPath);
     pSysWrite = new SysWrite();
 
-    memset(mLeft, strlen(mLeft), '\0');
-    memset(mTop, strlen(mTop), '\0');
-    memset(mWidth, strlen(mWidth), '\0');
-    memset(mHeight, strlen(mHeight), '\0');
+    memset(mLeft, '\0', strlen(mLeft));
+    memset(mTop, '\0', strlen(mTop));
+    memset(mWidth, '\0', strlen(mWidth));
+    memset(mHeight, '\0', strlen(mHeight));
 }
 
 DisplayMode::~DisplayMode() {
