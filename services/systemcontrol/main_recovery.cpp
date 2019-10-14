@@ -38,10 +38,8 @@ int main(int argc, char** argv)
 #else
     Ubootenv *pUbootenv = new Ubootenv();
 #endif
-    SysWrite *pSysWrite = new SysWrite();
 
     DisplayMode displayMode(path, pUbootenv);
-    pSysWrite->setProperty(PROP_FS_MODE, "recovery");
     displayMode.init();
 
     //don't end this progress, wait for hdmi plug detect thread.

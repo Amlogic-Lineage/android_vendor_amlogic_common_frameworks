@@ -39,6 +39,7 @@
 #include <SkRefCnt.h>
 #include <SkCanvas.h>
 #include <SkCodec.h>
+#include <SkAndroidCodec.h>
 #include <SkColorPriv.h>
 #include <SkColorSpace.h>
 #include <SkColorSpaceXform.h>
@@ -74,7 +75,7 @@
 #include "RGBPicture.h"
 
 #include "ImagePlayerProcessData.h"
-
+#include "GetInMemory.h"
 
 #define CHECK assert
 #define CHECK_EQ(a,b) CHECK((a)==(b))
@@ -90,10 +91,17 @@
 #define PICDEC_IOC_FRAME_POST       _IOW(PICDEC_IOC_MAGIC, 0x01, unsigned int)
 
 #define VIDEO_ZOOM_SYSFS            "/sys/class/video/zoom"
+#define VIDEO_INUSE                 "/sys/class/video/video_inuse"
+#define VIDEO_VDEC                  "/sys/class/vdec/core"
+
+#define CHECK_VIDEO_INUSE_RETRY_COUNT 50
 
 #define VIDEO_LAYER_FORMAT_RGB      0
 #define VIDEO_LAYER_FORMAT_RGBA     1
 #define VIDEO_LAYER_FORMAT_ARGB     2
+
+using ::vendor::amlogic::hardware::systemcontrol::V1_0::Result;
+using ::android::hardware::hidl_string;
 
 namespace android {
     class DeathNotifier: public IBinder::DeathRecipient {
@@ -956,15 +964,19 @@ namespace android {
         mParameter->cropWidth = SURFACE_4K_WIDTH;
         mParameter->cropHeight = SURFACE_4K_HEIGHT;
 
-        if (mDisplayFd >= 0) {
-            close(mDisplayFd);
-        }
-
         mMovieThread = new MovieThread(this);
         mDeathNotifier = new DeathNotifier(this);
 
         //if video exit with some exception, need restore video attribute
         initVideoAxis();
+
+        if (mDisplayFd >= 0) {
+            close(mDisplayFd);
+        }
+
+        if (!checkVideoInUse(CHECK_VIDEO_INUSE_RETRY_COUNT)) {
+            return RET_ERR_BAD_VALUE;
+        }
 
         mDisplayFd = open(PICDEC_SYSFS, O_RDWR);
 
@@ -974,7 +986,7 @@ namespace android {
             return RET_ERR_OPEN_SYSFS;
         }
 
-#if 1//workround: need post a frame to video layer
+#if 0   //workround: need post a frame to video layer
         FrameInfo_t info;
 
         char* bitmap_addr = (char*)malloc(100 * 100 * 3);
@@ -1636,6 +1648,7 @@ namespace android {
             mTif = NULL;
         }
 
+        mSysWrite->writeSysfs(VIDEO_INUSE, "0");
         resetRotateScale();
         resetTranslate();
         resetHWScale();
@@ -1645,23 +1658,26 @@ namespace android {
     SkBitmap* ImagePlayerService::decode(SkStreamAsset *stream,
                                          InitParameter *mParameter) {
         std::unique_ptr<SkStream> s = stream->fork();
-        std::unique_ptr<SkCodec> codec(SkCodec::MakeFromStream(std::move(s)));
+        std::unique_ptr<SkCodec> c(SkCodec::MakeFromStream(std::move(s)));
 
-        if (!codec) {
+        if (!c) {
+            ALOGE("decode make codec from stream null!");
             return NULL;
         }
+        std::unique_ptr<SkAndroidCodec> codec = SkAndroidCodec::MakeFromCodec(std::move(c),
+            SkAndroidCodec::ExifOrientationBehavior::kRespect);
 
         SkImageInfo imageInfo = codec->getInfo();
         auto alphaType = imageInfo.isOpaque() ? kOpaque_SkAlphaType :
                          kPremul_SkAlphaType;
         auto info = SkImageInfo::Make(imageInfo.width(), imageInfo.height(),
                                       kN32_SkColorType, alphaType);
-        ALOGE("codec bmpinfo %d %d %d\n", imageInfo.width(), imageInfo.height(),
+        ALOGI("codec bmpinfo %d %d %d\n", imageInfo.width(), imageInfo.height(),
               SkCodec::kIncompleteInput);
         SkBitmap decodingBitmap;
         decodingBitmap.setInfo(info);
         decodingBitmap.tryAllocPixels(info);
-        SkCodec::Result result = codec->getPixels(info, decodingBitmap.getPixels(),
+        SkCodec::Result result = codec->getAndroidPixels(info, decodingBitmap.getPixels(),
                                  decodingBitmap.rowBytes());
 
         if ((SkCodec::kSuccess != result) && (SkCodec::kIncompleteInput != result)) {
@@ -1903,7 +1919,8 @@ namespace android {
             stream = new SkMemoryStream(data);
         } else if (!strncasecmp("http://", mImageUrl, 7)
                    || !strncasecmp("https://", mImageUrl, 8)) {
-            stream = new SkHttpStream(mImageUrl, mHttpService);
+            ALOGI("SkHttpStream:%s", mImageUrl);
+            stream = getStreamForHttps(mImageUrl);
         } else {
             ALOGI("SkFILEStream:%s", mImageUrl);
             stream = new SkFILEStream(mImageUrl);
@@ -1912,12 +1929,23 @@ namespace android {
         return stream;
     }
 
+    SkStreamAsset* ImagePlayerService::getStreamForHttps(char* url) {
+        ALOGD("getStreamForHttps url %s", url);
+        char* path = getFileByCurl(url);
+        if (path == nullptr) {
+            ALOGE("getStreamForHttps fails");
+            return nullptr;
+        }
+        ALOGD("getStreamForHttps image path %s", path);
+        SkStreamAsset *stream = new SkFILEStream(path);
+        return stream;
+    }
+
     //render to video layer
     int ImagePlayerService::prepare() {
         Mutex::Autolock autoLock(mLock);
-        FrameInfo_t info;
-
         ALOGI("prepare image path:%s", mImageUrl);
+        FrameInfo_t info;
 
         if ((mFileDescription < 0) && (0 == strlen(mImageUrl))) {
             ALOGE("prepare decode image fd error");
@@ -2004,29 +2032,30 @@ namespace android {
 
     int ImagePlayerService::prepareBuf(const char *uri) {
         Mutex::Autolock autoLock(mLock);
-
         ALOGI("prepare buffer image path:%s", uri);
-        char path[MAX_FILE_PATH_LEN];
-        SkStreamAsset *stream;
-
-        if (!strncasecmp("file://", uri, 7)) {
-            strncpy(path, uri + 7, MAX_FILE_PATH_LEN - 1);
-            stream = new SkFILEStream(path);
-        } else if (!strncasecmp("http://", uri, 7)
-                   || !strncasecmp("https://", uri, 8)) {
-            strncpy(path, uri, MAX_FILE_PATH_LEN - 1);
-            stream = new SkHttpStream(path, mHttpService);
-        } else {
-            return RET_ERR_INVALID_OPERATION;
-        }
 
         if (mBufBitmap != NULL) {
             delete mBufBitmap;
             mBufBitmap = NULL;
         }
 
-        mMovieImage = false;
-        mFrameIndex = 0;
+        if (mMovieImage) {
+            mMovieImage = false;
+            MovieThreadStop();
+            mFrameIndex = 0;
+        }
+
+        SkStreamAsset *stream;
+        if (!strncasecmp("file://", uri, 7)) {
+            strncpy(mImageUrl, uri + 7, MAX_FILE_PATH_LEN - 1);
+            stream = new SkFILEStream(mImageUrl);
+        } else if (!strncasecmp("http://", uri, 7)
+                   || !strncasecmp("https://", uri, 8)) {
+            strncpy(mImageUrl, uri, MAX_FILE_PATH_LEN - 1);
+            stream = getStreamForHttps(mImageUrl);
+        } else {
+            return RET_ERR_INVALID_OPERATION;
+        }
 
         if (isMovieByExtenName(uri)) {
             ALOGI("it's a movie image, show it with thread");
@@ -2043,10 +2072,11 @@ namespace android {
                 mBufBitmap = decode(stream, NULL);
             }
         } else if (isTiffByExtenName(uri)) {
-            mBufBitmap = decodeTiff(path);
+            mBufBitmap = decodeTiff(mImageUrl);
         } else {
             bool canDecode = true;
             SkBitmap *bitmap = NULL;
+            ALOGD("prepare buffer codec to get bitmap");
 
             if (!isSupportFromat(uri, &bitmap)) {
                 ALOGE("prepare buffer codec can not support it");
@@ -2091,7 +2121,6 @@ namespace android {
             delete mBufBitmap;
             mBufBitmap = dstBitmap;
         }
-
         return RET_OK;
     }
 
@@ -2640,10 +2669,12 @@ namespace android {
             return ret;
         }
 
+        /*
         if (!strncasecmp("http://", uri, 7) || !strncasecmp("https://", uri, 8)) {
             SkHttpStream httpStream(uri, mHttpService);
             return verifyBySkCodec(&httpStream, bitmap);
         }
+        */
 
         return false;
     }
@@ -2732,6 +2763,10 @@ namespace android {
     }
 
     bool ImagePlayerService::MovieShow() {
+        if (!mMovieImage) {
+            ALOGE("MovieShow not movie!");
+            return false;
+        }
         SkStreamRewindable *stream;
         stream = getSkStream();
 
@@ -2763,6 +2798,10 @@ namespace android {
             SkCodec::Options opts;
             opts.fFrameIndex = mFrameIndex;
             //opts.fHasPriorFrame = false;
+            if (&frameInfos[mFrameIndex] == nullptr) {
+                ALOGE("MovieShow Could not get frame %d", mFrameIndex);
+                return false;
+            }
             const size_t requiredFrame = frameInfos[mFrameIndex].fRequiredFrame;
 
             if (requiredFrame != SkCodec::kNone) {
@@ -2836,6 +2875,46 @@ namespace android {
         return true;
     }
 
+    bool ImagePlayerService::checkVideoInUse(int retryNum) {
+        ALOGD("checkVideoInUse");
+        int videoInUseInt = -1;
+        char videoInUse[MAX_STR_LEN + 1] = {0};
+        std::string vdec;
+        char* vdec_empty = "connected vdec list empty";
+
+        do {
+            mSysWrite->readSysfs(VIDEO_INUSE, videoInUse);
+            readSysfs(std::string(VIDEO_VDEC), vdec);
+            videoInUseInt = atoi(videoInUse);
+            usleep(100 * 1000);
+        } while((retryNum-- != 0) && (videoInUseInt != 0 || (strcmp(vdec.c_str(), vdec_empty) != 0)));
+
+        if (videoInUseInt == 0 && (strcmp(vdec.c_str(), vdec_empty) == 0)) {
+            ALOGD("checkVideoInUse succeeds.");
+            return true;
+        }
+        ALOGE("checkVideoInUse fails. %d vdec %s", videoInUseInt, vdec.c_str());
+        return false;
+    }
+
+    void ImagePlayerService::readSysfs(const std::string& path, std::string& value) {
+        if (mSystemControl == nullptr) {
+            mSystemControl = ISystemControl::tryGetService();
+        }
+        if (mSystemControl != nullptr) {
+            mSystemControl->readSysfs(path, [&value](const Result &ret, const hidl_string& v) {
+                if (Result::OK == ret) {
+                    value = v;
+                }
+            });
+            ALOGD("readSysfs path %s value %s", path.c_str(), value.c_str());
+            return;
+        }
+        ALOGE("readSysfs can't get systemcontrol service");
+
+        return;
+    }
+
     void ImagePlayerService::MovieRenderPost(SkBitmap *bitmap) {
         //don't use renderAndShow, too many logs
         //renderAndShow(bitmap);
@@ -2883,7 +2962,7 @@ namespace android {
     }
 
     int ImagePlayerService::MovieThreadStop() {
-        if (mMovieThread->isRunning()) {
+        if (mMovieThread != nullptr && mMovieThread->isRunning()) {
             ALOGI("MovieThread is running, need stop it firstly");
             status_t result = mMovieThread->requestExitAndWait();
 

@@ -211,13 +211,14 @@ using namespace android;
 #define PROP_HAS_CVBS_MODE              "ro.vendor.platform.has.cvbsmode"
 #define PROP_BEST_OUTPUT_MODE           "ro.vendor.platform.best_outputmode"
 #define PROP_BOOTANIM                   "init.svc.bootanim"
-#define PROP_FS_MODE                    "const.filesystem.mode"
-#define PROP_BOOTANIM_DELAY             "const.bootanim.delay"
 #define PROP_BOOTVIDEO_SERVICE          "service.bootvideo"
 #define PROP_DEEPCOLOR                  "vendor.sys.open.deepcolor" //default close this function, when reboot
 #define PROP_BOOTCOMPLETE               "service.bootanim.exit"
+#define PROP_DOLBY_VISION_FEATURE       "ro.vendor.platform.support.dolbyvision"
 #define PROP_DOLBY_VISION_ENABLE        "persist.vendor.sys.dolbyvision.enable"
 #define PROP_DOLBY_VISION_TYPE          "persist.vendor.sys.dolbyvision.type"
+#define PROP_DOLBY_VISION_TV_ENABLE     "persist.vendor.sys.tv.dolbyvision.enable"
+#define PROP_DOLBY_VISION_TV_TYPE       "persist.vendor.sys.tv.dolbyvision.type"
 #define PROP_DOLBY_VISION_PRIORITY      "persist.vendor.sys.graphics.priority"
 #define PROP_HDR_MODE_STATE             "persist.vendor.sys.hdr.state"
 #define PROP_SDR_MODE_STATE             "persist.vendor.sys.sdr.state"
@@ -248,12 +249,15 @@ using namespace android;
 #define UBOOTENV_CVBSCABLE              "ubootenv.var.cvbscable"
 #define UBOOTENV_OUTPUTMODE             "ubootenv.var.outputmode"
 #define UBOOTENV_ISBESTMODE             "ubootenv.var.is.bestmode"
+#define UBOOTENV_BESTDOLBYVISION        "ubootenv.var.bestdolbyvision"
 #define UBOOTENV_EDIDCRCVALUE           "ubootenv.var.edid.crcvalue"
 
 #define UBOOTENV_REBOOT_MODE           "ubootenv.var.reboot_mode_android"
 
 #define UBOOTENV_CUSTOMWIDTH            "ubootenv.var.customwidth"
 #define UBOOTENV_CUSTOMHEIGHT           "ubootenv.var.customheight"
+
+#define UBOOTENV_SDR2HDR               "ubootenv.var.sdr2hdr"
 
 #define FULL_WIDTH_480                  720
 #define FULL_HEIGHT_480                 480
@@ -269,6 +273,8 @@ using namespace android;
 #define FULL_HEIGHT_4K2K                2160
 #define FULL_WIDTH_4K2KSMPTE            4096
 #define FULL_HEIGHT_4K2KSMPTE           2160
+#define FULL_WIDTH_PANEL                1024
+#define FULL_HEIGHT_PANEL               600
 
 enum {
     EVENT_OUTPUT_MODE_CHANGE            = 0,
@@ -310,6 +316,10 @@ enum {
 #define MODE_4K2KSMPTE30HZ              "smpte30hz"
 #define MODE_4K2KSMPTE50HZ              "smpte50hz"
 #define MODE_4K2KSMPTE60HZ              "smpte60hz"
+#define MODE_PANEL                      "panel"
+#define MODE_PAL_M                      "pal_m"
+#define MODE_PAL_N                      "pal_n"
+#define MODE_NTSC_M                      "ntsc_m"
 
 #define MODE_480I_PREFIX                "480i"
 #define MODE_480P_PREFIX                "480p"
@@ -346,7 +356,11 @@ enum {
     DISPLAY_MODE_4K2KSMPTE50HZ          = 20,
     DISPLAY_MODE_4K2KSMPTE60HZ          = 21,
     DISPLAY_MODE_768P                   = 22,
-    DISPLAY_MODE_TOTAL                  = 23
+    DISPLAY_MODE_PANEL                  = 23,
+    DISPLAY_MODE_PAL_M                  = 24,
+    DISPLAY_MODE_PAL_N                  = 25,
+    DISPLAY_MODE_NTSC_M                  = 26,
+    DISPLAY_MODE_TOTAL                  = 27
 };
 
 typedef enum {
@@ -397,13 +411,13 @@ class DisplayMode : public HDCPTxAuth::TxUevntCallbak,
                                       private FrameRateAutoAdaption::Callbak
 {
 public:
-    DisplayMode(const char *path);
     DisplayMode(const char *path, Ubootenv *ubootenv);
     ~DisplayMode();
 
     void init();
     void reInit();
 
+    void setRecoveryMode(bool isRecovery);
     void setTvModelName();
     void setLogLevel(int level);
     int dump(char *result);
@@ -412,7 +426,8 @@ public:
     void setDigitalMode(const char* mode);
     void setPosition(int left, int top, int width, int height);
     void getPosition(const char* curMode, int *position);
-    void setDolbyVisionEnable(int state);
+    void initDolbyVision(output_mode_state state);
+    void setDolbyVisionEnable(int state, output_mode_state mode_state);
     int  getDolbyVisionType();
     bool isDolbyVisionEnable();
     bool isTvSupportDolbyVision(char *mode);
@@ -489,6 +504,7 @@ private:
     const char* pConfigPath;
     int mDisplayType;
     bool mVideoPlaying;
+    bool mIsRecovery = false;
 
     mutex_t mEnvLock;
 
