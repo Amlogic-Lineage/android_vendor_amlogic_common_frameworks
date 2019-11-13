@@ -11,11 +11,13 @@ LOCAL_SRC_FILES:= \
   SysWrite.cpp \
   RGBPicture.c  \
   TIFF2RGBA.cpp \
-  ImagePlayerProcessData.cpp
+  ImagePlayerProcessData.cpp \
+  GetInMemory.cpp \
 
 LOCAL_STATIC_LIBRARIES := libtiff_static
 LOCAL_SHARED_LIBRARIES := \
   vendor.amlogic.hardware.imageserver@1.0 \
+  vendor.amlogic.hardware.systemcontrol@1.1 \
   libhidlbase \
   libhidltransport \
   libbinder                   \
@@ -27,7 +29,8 @@ LOCAL_SHARED_LIBRARIES := \
   libjpeg                     \
   libz			      \
   libmedia                    \
-  libdl
+  libdl                       \
+  libcurl
 
 
 LOCAL_C_INCLUDES += \

@@ -320,6 +320,20 @@ void CPQControl::onHDRStatusChange()
     }
 }
 
+void CPQControl::onTXStatusChange()
+{
+    SYS_LOGD("%s!\n", __FUNCTION__);
+
+    output_type_t mode = GetTxOutPutMode();
+    mPQdb->mOutPutType = mode;
+    if ((mode == OUTPUT_TYPE_MAX) || !(isCVBSParamValid())) {
+        SYS_LOGD("%s: no need load TX pq param!\n", __FUNCTION__);
+    } else {
+        source_input_param_t SourceInputParam = GetCurrentSourceInputInfo();
+        LoadPQSettings(SourceInputParam);
+    }
+}
+
 int CPQControl::LoadPQSettings(source_input_param_t source_input_param)
 {
     int ret = 0;
@@ -344,8 +358,9 @@ int CPQControl::LoadPQSettings(source_input_param_t source_input_param)
         if ((cpq_setting_last_source == source_input_param.source_input)
             && (cpq_setting_last_sig_fmt == source_input_param.sig_fmt)
             && (cpq_setting_last_trans_fmt == source_input_param.trans_fmt)
-            && (hdrStatus == mIsHdrLastTime)) {
-            SYS_LOGD("Same signal,no need load!\n");
+            && (hdrStatus == mIsHdrLastTime)
+            && (mLastOutPutType == mPQdb->mOutPutType)) {
+            SYS_LOGD("Same signal,no need load PQ param!\n");
             return ret;
         }
 
@@ -381,8 +396,8 @@ int CPQControl::LoadPQSettings(source_input_param_t source_input_param)
         cpq_setting_last_sig_fmt = source_input_param.sig_fmt;
         cpq_setting_last_trans_fmt = source_input_param.trans_fmt;
         mIsHdrLastTime = hdrStatus;
+        mLastOutPutType = mPQdb->mOutPutType;
     }
-
     return ret;
 }
 
@@ -5405,4 +5420,40 @@ bool CPQControl::isFileExist(const char *file_name)
     } else {
        return true;
     }
+}
+
+output_type_t CPQControl::GetTxOutPutMode(void)
+{
+    char buf[32] = {0};
+    output_type_t OutPutType = OUTPUT_TYPE_MAX;
+    if ((pqReadSys(SYS_DISPLAY_MODE_PATH, buf, sizeof(buf)) < 0) || (strlen(buf) == 0)) {
+        SYS_LOGD("Read /sys/class/display/mode failed!\n");
+        OutPutType = OUTPUT_TYPE_MAX;
+    } else {
+        SYS_LOGD( "%s: current output mode is %s!\n", __FUNCTION__, buf);
+        if (strstr(buf, "null")) {
+            OutPutType = OUTPUT_TYPE_MAX;
+        } else if (strstr(buf, "480cvbs")) {
+            OutPutType = OUTPUT_TYPE_NTSC;
+        } else if(strstr(buf, "576cvbs")) {
+            OutPutType = OUTPUT_TYPE_PAL;
+        } else {
+            OutPutType = OUTPUT_TYPE_HDMI;
+        }
+
+        SYS_LOGD("%s: output mode is %d!\n", __FUNCTION__, OutPutType);
+    }
+
+    return OutPutType;
+}
+
+bool CPQControl::isCVBSParamValid(void)
+{
+    bool ret = mPQdb->CheckCVBSParamValidStatus();
+    if (ret) {
+        SYS_LOGD("cvbs param exist!\n");
+    } else {
+        SYS_LOGD("cvbs param don't exist!\n");
+    }
+    return ret;
 }

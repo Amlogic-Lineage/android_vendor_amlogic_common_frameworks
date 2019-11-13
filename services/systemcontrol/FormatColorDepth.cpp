@@ -93,7 +93,9 @@ FormatColorDepth::FormatColorDepth() {
 }
 
 FormatColorDepth::~FormatColorDepth() {
+#if defined(ODROID)
     delete mUbootenv;
+#endif
 }
 
 bool FormatColorDepth::initColorAttribute(char* supportedColorList, int len) {

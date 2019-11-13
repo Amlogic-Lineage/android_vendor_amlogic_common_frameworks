@@ -44,6 +44,7 @@
 #define SSC_PATH                  "/sys/class/lcd/ss"
 #define TEST_SCREEN               "/sys/class/video/test_screen"
 #define PQ_SET_RW_INTERFACE       "/sys/class/amvecm/pq_reg_rw"
+#define SYS_DISPLAY_MODE_PATH     "/sys/class/display/mode"
 
 #define FINAL_GAIN_REG_NUM        46
 
@@ -106,6 +107,7 @@ public:
     static CPQControl *GetInstance();
     virtual void onVframeSizeChange();
     virtual void onHDRStatusChange();
+    virtual void onTXStatusChange();
     virtual void resetAllUserSettingParam();
     virtual void Set_Backlight(int value);
     virtual void GetDynamicBacklighConfig(int *thtf, int *lut_mode, int *heigh_param, int *low_param);
@@ -333,11 +335,14 @@ private:
     int pqReadSys(const char *path, char *buf, int count);
     void pqTransformStringToInt(const char *buf, int *val);
     unsigned int GetSharpnessRegVal(int addr);
+    output_type_t GetTxOutPutMode(void);
+    bool isCVBSParamValid(void);
 
     tv_source_input_t cpq_setting_last_source;
     tvin_sig_fmt_t cpq_setting_last_sig_fmt;
     tvin_trans_fmt_t cpq_setting_last_trans_fmt;
     bool mIsHdrLastTime;
+    output_type_t mLastOutPutType;
     bool mInitialized;
     //cfg
     bool mbCpqCfg_seperate_db_enable;

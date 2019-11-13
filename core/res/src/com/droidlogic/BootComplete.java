@@ -38,7 +38,6 @@ import com.droidlogic.app.PlayBackManager;
 import com.droidlogic.app.SystemControlEvent;
 import com.droidlogic.app.SystemControlManager;
 import com.droidlogic.app.UsbCameraManager;
-import com.droidlogic.HdmiCecExtend;
 import com.droidlogic.app.DolbyVisionSettingManager;
 import com.droidlogic.app.AudioSettingManager;
 
@@ -72,7 +71,7 @@ public class BootComplete extends BroadcastReceiver {
         final ContentResolver resolver = context.getContentResolver();
         //register system control callback
         mSystemControlEvent = new SystemControlEvent(context);
-        mSystemControlManager.setListener(mSystemControlEvent);
+        mSystemControlManager.setHdmiHotPlugListener(mSystemControlEvent);
         final OutputModeManager outputModeManager = new OutputModeManager(context);
 
         mAudioManager = (AudioManager) context.getSystemService(context.AUDIO_SERVICE);
@@ -99,10 +98,6 @@ public class BootComplete extends BroadcastReceiver {
 
         new PlayBackManager(context).initHdmiSelfadaption();
 
-        if (needCecExtend(mSystemControlManager, context)) {
-            new HdmiCecExtend(context);
-        }
-
         //start optimization service
         context.startService(new Intent(context, Optimization.class));
 
@@ -115,7 +110,7 @@ public class BootComplete extends BroadcastReceiver {
 	if (mSystemControlManager.getPropertyBoolean("ro.vendor.platform.support.network_led", false) == true)
             context.startService(new Intent(context, NetworkSwitchService.class));
 
-        if (mSystemControlManager.getPropertyBoolean("net.wifi.suspend", false))
+        if (mSystemControlManager.getPropertyBoolean("ro.vendor.platform.wifi.suspend", false))
             context.startService(new Intent(context, WifiSuspendService.class));
 
         if (mHasTvUiMode)

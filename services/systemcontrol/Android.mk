@@ -31,6 +31,34 @@ LOCAL_PROPRIETARY_MODULE := true
 endif
 include $(BUILD_SHARED_LIBRARY)
 
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES:= \
+  SystemControlClient.cpp
+
+LOCAL_SHARED_LIBRARIES := \
+  libutils \
+  libcutils \
+  liblog
+
+LOCAL_SHARED_LIBRARIES += \
+  vendor.amlogic.hardware.systemcontrol@1.0 \
+  vendor.amlogic.hardware.systemcontrol@1.1 \
+  libbase \
+  libhidlbase \
+  libhidltransport
+
+LOCAL_C_INCLUDES += \
+  $(BOARD_AML_VENDOR_PATH)/frameworks/services/systemcontrol/PQ/include
+
+LOCAL_MODULE:= libsystemcontrolclient
+
+LOCAL_MODULE_TAGS := optional
+
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 26 && echo OK),OK)
+LOCAL_PROPRIETARY_MODULE := true
+endif
+include $(BUILD_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 
@@ -86,15 +114,12 @@ LOCAL_SRC_FILES:= \
   VtsHalHidlTargetTestEnvBase.cpp
 
 ifeq ($(PRODUCT_BRAND), ODROID)
+LOCAL_CFLAGS += -DODROID
 LOCAL_SRC_FILES += \
   ubootenv/Ubootenv-odroid.cpp
 else
 LOCAL_SRC_FILES += \
-  ubootenv/Ubootenv-odroid.cpp
-endif
-
-ifeq ($(PRODUCT_BRAND), ODROID)
-LOCAL_CFLAGS += -DODROID
+  ubootenv/Ubootenv.cpp
 endif
 
 LOCAL_SHARED_LIBRARIES := \
@@ -179,15 +204,12 @@ LOCAL_SRC_FILES:= \
   FormatColorDepth.cpp
 
 ifeq ($(PRODUCT_BRAND), ODROID)
+LOCAL_CFLAGS += -DODROID
 LOCAL_SRC_FILES += \
   ubootenv/Ubootenv-odroid.cpp
 else
 LOCAL_SRC_FILES += \
   ubootenv/Ubootenv.cpp
-endif
-
-ifeq ($(PRODUCT_BRAND), ODROID)
-LOCAL_CFLAGS += -DODROID
 endif
 
 LOCAL_STATIC_LIBRARIES := \

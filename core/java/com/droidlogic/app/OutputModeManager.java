@@ -90,11 +90,13 @@ public class OutputModeManager {
     public static final String ENV_OUTPUT_MODE              = "ubootenv.var.outputmode";
     public static final String ENV_DIGIT_AUDIO              = "ubootenv.var.digitaudiooutput";
     public static final String ENV_IS_BEST_MODE             = "ubootenv.var.is.bestmode";
+    public static final String ENV_IS_BEST_DOLBYVISION      = "ubootenv.var.bestdolbyvision";
     public static final String ENV_COLORATTRIBUTE           = "ubootenv.var.colorattribute";
 
     public static final String PROP_BEST_OUTPUT_MODE        = "ro.vendor.platform.best_outputmode";
     public static final String PROP_HDMI_ONLY               = "ro.vendor.platform.hdmionly";
     public static final String PROP_SUPPORT_4K              = "ro.vendor.platform.support.4k";
+    public static final String PROP_SUPPORT_OVER_4K30       = "ro.vendor.platform.support.over.4k30";
     public static final String PROP_DEEPCOLOR               = "vendor.sys.open.deepcolor";
     public static final String PROP_DTSDRCSCALE             = "persist.vendor.sys.dtsdrcscale";
     public static final String PROP_DTSEDID                 = "persist.vendor.sys.dts.edid";
@@ -482,6 +484,10 @@ public class OutputModeManager {
                         && (str.contains("2160") || str.contains("smpte"))) {
                         continue;
                     }
+                    if (!getPropertyBoolean(PROP_SUPPORT_OVER_4K30, true)
+                        && (str.contains("2160p50") || str.contains("2160p60") || str.contains("smpte"))) {
+                        continue;
+                    }
                     value += str + ",";
                 }
             }
@@ -539,6 +545,15 @@ public class OutputModeManager {
         return Boolean.parseBoolean(isBestOutputmode.equals("") ? "true" : isBestOutputmode);
     }
 
+    public void setBestDolbyVision(boolean enable) {
+        mSystenControl.setBootenv(ENV_IS_BEST_DOLBYVISION, enable ? "true" : "false");
+    }
+
+    public boolean isBestDolbyVsion() {
+        String isBestDolbyVsion = mSystenControl.getBootenv(ENV_IS_BEST_DOLBYVISION, "true");
+        Log.e("TEST", "isBestDolbyVsion:" + isBestDolbyVsion);
+        return Boolean.parseBoolean(isBestDolbyVsion.equals("") ? "true" : isBestDolbyVsion);
+    }
     public boolean isDeepColor() {
         return getPropertyBoolean(PROP_DEEPCOLOR, false);
     }
@@ -794,8 +809,10 @@ public class OutputModeManager {
 
     public void saveDigitalAudioFormatMode(int mode, String submode) {
         String tmp;
-        int surround = Settings.Global.getInt(mResolver,
-                ENCODED_SURROUND_OUTPUT, -1);
+        // trigger AudioService retrieve support audio format value
+        Settings.Global.putInt(mResolver,
+                ENCODED_SURROUND_OUTPUT/*Settings.Global.ENCODED_SURROUND_OUTPUT*/, -1);
+        int surround = -1;
         switch (mode) {
             case DIGITAL_SPDIF:
                 Settings.Global.putInt(mResolver,
