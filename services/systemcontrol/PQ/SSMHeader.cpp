@@ -299,9 +299,10 @@ struct SSMHeader_section2_t gSSMHeader_section2[] = {
     {.addr = 0, .size = SOURCE_MAX, .valid = 0, .rsv = {0}},
     {.addr = 0, .size = SOURCE_MAX, .valid = 0, .rsv = {0}},
     {.addr = 0, .size = SOURCE_MAX, .valid = 0, .rsv = {0}},
+    {.addr = 0, .size = SOURCE_MAX, .valid = 0, .rsv = {0}},
 };
 
 struct SSMHeader_section1_t gSSMHeader_section1 = 
 {
-    .magic = 0x8f8f8f8f, .version = 1963143720, .count = 296, .rsv = {0}
+    .magic = 0x8f8f8f8f, .version = 2198362101, .count = 297, .rsv = {0}
 };
