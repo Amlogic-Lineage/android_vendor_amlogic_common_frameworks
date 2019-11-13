@@ -64,6 +64,7 @@ EVENT_HDMI_AUDIO_OUT                = 4,
 EVENT_HDMI_AUDIO_IN                 = 5,
 */
 void SystemControlHal::onEvent(int event) {
+    AutoMutex _l( mLock );
     int clientSize = mClients.size();
 
     if (ENABLE_LOG_PRINT)
@@ -529,6 +530,7 @@ Return<void> SystemControlHal::resolveResolutionValue(const hidl_string& mode, r
 }
 
 Return<void> SystemControlHal::setCallback(const sp<ISystemControlCallback>& callback) {
+    AutoMutex _l( mLock );
     if (callback != nullptr) {
         int cookie = -1;
         int clientSize = mClients.size();
@@ -566,6 +568,17 @@ Return<Result> SystemControlHal::setAppInfo(const hidl_string& pkg, const hidl_s
 
     mSysControl->setAppInfo(pkg, cls, procList);
     return Result::OK;
+}
+
+Return<void> SystemControlHal::getPrefHdmiDispMode(getPrefHdmiDispMode_cb _hidl_cb) {
+    std::string mode;
+    bool ret = mSysControl->getPrefHdmiDispMode(&mode);
+    ALOGI("getPrefHdmiDispMode mode :%s", mode.c_str());
+    if (ret == true)
+        _hidl_cb(Result::OK, mode);
+    else
+        _hidl_cb(Result::FAIL, mode);
+    return Void();
 }
 
 //for 3D
@@ -1105,6 +1118,7 @@ Return<int32_t> SystemControlHal::factoryGetSharpnessParams(int32_t inputSrc, in
 //PQ end
 
 void SystemControlHal::handleServiceDeath(uint32_t cookie) {
+    AutoMutex _l( mLock );
     mClients[cookie]->unlinkToDeath(mDeathRecipient);
     mClients[cookie].clear();
 }

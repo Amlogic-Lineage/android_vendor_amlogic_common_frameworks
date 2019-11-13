@@ -107,6 +107,7 @@ class SystemControlHal : public ISystemControl, public SystemControlNotify {
     Return<void> resolveResolutionValue(const hidl_string& mode, resolveResolutionValue_cb _hidl_cb) override;
     Return<void> setCallback(const sp<ISystemControlCallback>& callback) override;
     Return<Result> setAppInfo(const hidl_string& pkg, const hidl_string& cls, const hidl_vec<hidl_string>& proc) override;
+    Return<void> getPrefHdmiDispMode(getPrefHdmiDispMode_cb _hidl_cb) override;
 
     //for 3D
     Return<void> set3DMode(const hidl_string& mode) override;
@@ -240,6 +241,7 @@ class SystemControlHal : public ISystemControl, public SystemControlNotify {
     void handleServiceDeath(uint32_t cookie);
 
     SystemControlService *mSysControl;
+    mutable Mutex mLock;
     std::map<uint32_t, sp<ISystemControlCallback>> mClients;
 
     class DeathRecipient : public android::hardware::hidl_death_recipient  {
