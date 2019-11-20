@@ -93,7 +93,7 @@ FormatColorDepth::FormatColorDepth() {
 }
 
 FormatColorDepth::~FormatColorDepth() {
-#if defined(ODROID)
+#if !defined(ODROID)
     delete mUbootenv;
 #endif
 }
