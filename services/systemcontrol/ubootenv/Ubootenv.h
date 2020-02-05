@@ -75,7 +75,7 @@ private:
     void propertyLoad();
 
 #if defined(ODROID)
-    char* getValueFromBootini(const char * key);
+    char* getValueFromEnvini(const char * key);
 #endif
     char mEnvPartitionName[32];
     int mEnvPartitionSize;

@@ -50,18 +50,18 @@ Ubootenv *Ubootenv::getInstance() {
 
 struct {
 	const char *value;
-} bootini[] = {
+} envini[] = {
 	"colorattribute",
 };
 
-int isBootiniValue(const char *key) {
+int isEnviniValue(const char *key) {
 	int i;
 
 	if (*key ==0)
 		return 0;
 
-	for (i=0; i< sizeof(bootini) / sizeof (bootini[0]); i++) {
-		if(!strcmp(key, bootini[i].value))
+	for (i=0; i< sizeof(envini) / sizeof (envini[0]); i++) {
+		if(!strcmp(key, envini[i].value))
 			return 1;
 	}
 
@@ -257,8 +257,8 @@ char * Ubootenv::get(const char * key)
 		return NULL;
 	}
 #if defined(ODROID)
-	if (isBootiniValue(key)) {
-		return getValueFromBootini(key);
+	if (isEnviniValue(key)) {
+		return getValueFromEnvini(key);
 	}
 #endif
 
@@ -273,8 +273,8 @@ char * Ubootenv::get(const char * key)
 }
 
 #if defined(ODROID)
-char * Ubootenv::getValueFromBootini(const char * key) {
-	FILE *fp = fopen("/odm/boot.ini", "r");
+char * Ubootenv::getValueFromEnvini(const char * key) {
+	FILE *fp = fopen("/odm/env.ini", "r");
 	char str[255];
 	char value[10];
 
@@ -284,10 +284,7 @@ char * Ubootenv::getValueFromBootini(const char * key) {
 	}
 
 	while (fgets(str, 255, fp) != NULL) {
-		char *token = strtok(str, " ");
-		if (strcmp(token, "setenv"))
-			continue;
-		token = strtok(NULL, " ");
+		char *token = strtok(str, "=");
 		if (!strcmp(token, key)) {
 			char *p = strtok(NULL, "\"");
 			sscanf(p, "%s", value);
