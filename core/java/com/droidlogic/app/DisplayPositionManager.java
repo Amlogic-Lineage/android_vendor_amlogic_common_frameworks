@@ -149,6 +149,26 @@ public class DisplayPositionManager {
         */
     }
 
+    public void alignBy(int leftMargin, int topMargin, int rightMargin, int bottomMarg) {
+        int leftAlign, topAlign, rightAlign, bottomAlign;
+
+        mCurrentMode = mOutputModeManager.getCurrentOutputMode();
+        initStep(mCurrentMode);
+        leftAlign = mCurrentLeft + leftMargin;
+        topAlign = mCurrentTop + topMargin;
+        rightAlign = mMaxRight - rightMargin;
+        bottomAlign = mMaxBottom - bottomMarg;
+
+        int width = rightAlign - leftAlign + 1;
+        int height = bottomAlign - topAlign + 1;
+
+        if (leftAlign < 0) leftAlign = 0;
+        if (topAlign < 0) topAlign = 0;
+
+        mOutputModeManager.savePosition(leftAlign, topAlign, width, height);
+        mOutputModeManager.setOsdMouse(leftAlign, topAlign, width, height);
+    }
+
     public void zoomByPercent(int percent){
 
         if (percent > 100 ) {
