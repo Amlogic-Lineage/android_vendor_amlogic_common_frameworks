@@ -251,7 +251,7 @@ public class HdmiCecManager {
     }
 
     public boolean isAutoChangeLanguageEnabled () {
-        return mSystemControlManager.getPropertyBoolean(PERSIST_HDMI_CEC_SET_MENU_LANGUAGE, true);
+        return mSystemControlManager.getPropertyBoolean(PERSIST_HDMI_CEC_SET_MENU_LANGUAGE, false);
     }
 
     public boolean isArcEnabled () {
@@ -299,7 +299,7 @@ public class HdmiCecManager {
         Settings.Global.putInt(contentResolver, SETTINGS_AUTO_POWER_OFF,  ON);
         Settings.Global.putInt(contentResolver, SETTINGS_AUTO_WAKE_UP,  ON);
         Settings.Global.putInt(contentResolver, SETTINGS_ARC_ENABLED,  ON);
-        sytemControlManager.setProperty(PERSIST_HDMI_CEC_SET_MENU_LANGUAGE, "true");
+        sytemControlManager.setProperty(PERSIST_HDMI_CEC_SET_MENU_LANGUAGE, "false");
         sytemControlManager.setProperty(PERSIST_HDMI_CEC_DEVICE_AUTO_POWEROFF, "true");
     }
 }

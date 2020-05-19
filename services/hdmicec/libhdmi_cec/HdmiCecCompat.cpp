@@ -31,11 +31,6 @@ bool isCompatVendor(int vendorId, int language) {
             }
         }
     }
-    // For korean code
-    if (KOR_LANGUAGE == language && LG_TV_VEDNOR_ID == vendorId) {
-        return true;
-    }
-
     return false;
 }
 

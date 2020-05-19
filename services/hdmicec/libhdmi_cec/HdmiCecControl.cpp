@@ -541,7 +541,7 @@ void HdmiCecControl::handleOTPMsg(hdmi_cec_event_t* event)
 void HdmiCecControl::handleSetMenuLanguage(hdmi_cec_event_t* event)
 {
     // Todo the language control logic should be comprized in system_server
-    if (!mSystemControl->getPropertyBoolean("persist.vendor.sys.cec.set_menu_language", true)) {
+    if (!mSystemControl->getPropertyBoolean("persist.vendor.sys.cec.set_menu_language", false)) {
         event->eventType &= ~HDMI_EVENT_CEC_MESSAGE;
         ALOGE("Auto Language Change disable");
         return;
@@ -1023,7 +1023,7 @@ int HdmiCecControl::preHandleOfSend(const cec_message_t* message)
             }
             break;
         case CEC_MESSAGE_SET_MENU_LANGUAGE:
-            if (!mSystemControl->getPropertyBoolean("persist.vendor.sys.cec.set_menu_language", true)) {
+            if (!mSystemControl->getPropertyBoolean("persist.vendor.sys.cec.set_menu_language", false)) {
                 ALOGD("[hcc] filter <Set Menu Language>.");
                 ret = -1;
             }
