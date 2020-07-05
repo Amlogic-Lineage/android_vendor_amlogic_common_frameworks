@@ -21,6 +21,7 @@ cc_binary {
     include_dirs: [
         "frameworks/native/headers/media_plugin",
     ],
+    compile_multilib: "32",
 }
 
 cc_binary {
