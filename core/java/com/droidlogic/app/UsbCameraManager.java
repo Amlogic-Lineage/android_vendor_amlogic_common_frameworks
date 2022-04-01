@@ -43,10 +43,12 @@ public class UsbCameraManager {
 
     private static final String PACKAGES[]      = {
         "com.android.camera2",
+        "com.android.camera2",
     };
 
     private static final String ACTIVITIES[]    = {
         "com.android.camera.CameraLauncher",
+        "com.android.camera.CameraActivity",
     };
 
     private Context mContext;
@@ -237,11 +239,7 @@ public class UsbCameraManager {
                    }
                 }
 
-                if (mIsAttach &&
-                    //device path has been set up by kernel
-                    ((devNum > mCamNum) ||
-                    //video device was plugged in when boot
-                    ((devNum > 0) && (mCamNum == devNum)))) {
+                if (mIsAttach &&devNum > 0) {
                     usbCameraAttach(mIsAttach);
                     for (int i = 0; i < ACTIVITIES.length; i++) {
                         enableComponent(PACKAGES[i], ACTIVITIES[i]);
